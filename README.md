@@ -36,3 +36,7 @@ You can create any bookmarklet with `./js-to-bookmarklet.sh`
 - **"Copy failed"**: Try refreshing the page, fallback copies plain text
 - **Browser compatibility**: Works best in Chrome/Edge, may fall back to plain text in Firefox
 - **"npm is required"**: Install Node.js to get npm and npx
+
+## Demo
+
+![Demo](resources/richlink.gif)
