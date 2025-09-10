@@ -28,12 +28,21 @@ function copyDocAsRichLink() {
             showSuccessNotification('✅ Rich link copied for Slack!');
             return { success: true, title: cleanTitle };
           })
-          .catch(() => fallbackTextCopy(plainText, cleanTitle));
+          .catch((error) => {
+            // Check for document focus errors and try workaround
+            if (error.message && error.message.includes('Document is not focused')) {
+              return attemptFocusWorkaround(clipboardItem, plainText, cleanTitle, richHtml, docUrl);
+            }
+            showWarningNotification('⚠️ Rich link failed, using plain text: ' + (error.message || 'Clipboard API error'));
+            return fallbackTextCopy(plainText, cleanTitle);
+          });
       } catch (clipboardError) {
+        showWarningNotification('⚠️ Rich link not supported, using plain text: ' + (clipboardError.message || 'ClipboardItem error'));
         return Promise.resolve(fallbackTextCopy(plainText, cleanTitle));
       }
     } else {
       // Fallback for older browsers
+      showWarningNotification('⚠️ Browser lacks rich link support, using plain text');
       return Promise.resolve(fallbackTextCopy(plainText, cleanTitle));
     }
 
@@ -89,6 +98,87 @@ function showErrorNotification(message) {
   showNotification(message, '#f8d7da', '❌');
 }
 
+// Show warning notification
+function showWarningNotification(message) {
+  showNotification(message, '#fff3cd', '⚠️');
+}
+
+// Attempt to workaround focus issues by temporarily focusing the document
+function attemptFocusWorkaround(clipboardItem, plainText, cleanTitle, richHtml, docUrl) {
+  try {
+    // Try to focus the document window first
+    window.focus();
+
+    // Focus on the document body or any clickable element
+    if (document.body) {
+      document.body.focus();
+    }
+
+    // Try to find and focus the Google Docs editor
+    const editor = document.querySelector('.kix-appview-editor') ||
+                  document.querySelector('[role="textbox"]') ||
+                  document.querySelector('.docs-texteventtarget-iframe');
+
+    if (editor) {
+      editor.focus();
+    }
+
+    // Small delay to allow focus to take effect, then retry clipboard
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        navigator.clipboard.write([clipboardItem])
+          .then(() => {
+            console.log('📋 Rich link copied (after focus):', {
+              URL: docUrl,
+              TEXT: cleanTitle,
+              RICHLINK: richHtml
+            });
+            showSuccessNotification('✅ Rich link copied for Slack! (auto-focused)');
+            resolve({ success: true, title: cleanTitle });
+          })
+          .catch(() => {
+            // Focus workaround failed, fall back to plain text
+            showWarningNotification('⚠️ Focus workaround failed, using plain text');
+            resolve(fallbackTextCopy(plainText, cleanTitle));
+          });
+      }, 100); // 100ms delay
+    });
+
+  } catch (error) {
+    // Workaround failed, fall back to plain text
+    showWarningNotification('⚠️ Focus workaround failed, using plain text');
+    return Promise.resolve(fallbackTextCopy(plainText, cleanTitle));
+  }
+}
+
+// Clear clipboard content
+function clearClipboard() {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText('').catch(() => {
+        // Fallback for clearing clipboard
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = '';
+          textarea.style.position = 'fixed';
+          textarea.style.left = '-9999px';
+          textarea.style.opacity = '0';
+
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        } catch (fallbackError) {
+          // Silent fail - clipboard clearing is not critical
+        }
+      });
+    }
+  } catch (error) {
+    // Silent fail - clipboard clearing is not critical
+  }
+}
+
 // Generic notification function with smooth animations
 function showNotification(message, bgColor, icon) {
   // Log to console
@@ -111,7 +201,7 @@ function showNotification(message, bgColor, icon) {
     top: 20px;
     right: 20px;
     background: ${bgColor};
-    color: ${bgColor === '#f8d7da' ? '#721c24' : 'white'};
+    color: ${bgColor === '#f8d7da' ? '#721c24' : bgColor === '#fff3cd' ? '#856404' : 'white'};
     padding: 12px 20px;
     border-radius: 8px;
     border: 1px solid black;
