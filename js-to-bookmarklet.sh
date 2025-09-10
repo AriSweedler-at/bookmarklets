@@ -7,8 +7,8 @@
 
 set -e
 
-# Configuration
-BOOKMARKLET_NAME="📋 Copy Doc Link"
+# Configuration - use environment variable or default
+BOOKMARKLET_NAME="${BOOKMARKLET_NAME:-"📋 Copy Doc Link"}"
 
 # Colors for output
 RED='\033[0;31m'
