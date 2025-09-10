@@ -62,64 +62,31 @@ fi
 INPUT_SIZE=$(wc -c < "$INPUT_FILE")
 print_status "Input size: ${INPUT_SIZE} bytes"
 
-# Try to minify with different tools (in order of preference)
-MINIFIED=false
-
-# Method 1: Try terser (best option)
-if command -v terser >/dev/null 2>&1; then
-    print_status "Minifying with terser..."
-    if terser "$INPUT_FILE" --compress --mangle --output "$TEMP_FILE" 2>/dev/null; then
-        MINIFIED=true
-        MINIFIER="terser"
-    fi
+# Check for npm/npx
+if ! command -v npm >/dev/null 2>&1; then
+    print_error "npm is required but not installed. Please install Node.js and npm."
+    exit 1
 fi
 
-# Method 2: Try uglifyjs if terser failed
-if [ "$MINIFIED" = false ] && command -v uglifyjs >/dev/null 2>&1; then
-    print_status "Minifying with uglifyjs..."
-    if uglifyjs "$INPUT_FILE" --compress --mangle --output "$TEMP_FILE" 2>/dev/null; then
-        MINIFIED=true
-        MINIFIER="uglifyjs"
-    fi
+if ! command -v npx >/dev/null 2>&1; then
+    print_error "npx is required but not installed. Please update Node.js/npm to get npx."
+    exit 1
 fi
 
-# Method 3: Try node with a simple minifier
-if [ "$MINIFIED" = false ] && command -v node >/dev/null 2>&1; then
-    print_status "Minifying with node (basic)..."
-    MINIFY_SCRIPT=$(mktemp)
-    cat > "$MINIFY_SCRIPT" << 'EOF'
-const fs = require('fs');
-const input = fs.readFileSync(process.argv[1], 'utf8');
-
-// Basic minification: remove comments, extra whitespace, and newlines
-const minified = input
-    .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
-    .replace(/\/\/.*$/gm, '')         // Remove line comments
-    .replace(/\s+/g, ' ')             // Replace multiple whitespace with single space
-    .replace(/;\s*}/g, '}')           // Remove semicolons before }
-    .replace(/{\s*/g, '{')            // Remove space after {
-    .replace(/}\s*/g, '}')            // Remove space after }
-    .replace(/,\s*/g, ',')            // Remove space after ,
-    .replace(/;\s*/g, ';')            // Remove space after ;
-    .trim();
-
-fs.writeFileSync(process.argv[2], minified);
-EOF
-
-    if node "$MINIFY_SCRIPT" "$INPUT_FILE" "$TEMP_FILE" 2>/dev/null; then
-        MINIFIED=true
-        MINIFIER="node (basic)"
-    fi
-    rm -f "$MINIFY_SCRIPT"
+# Install and use terser for minification
+print_status "Installing terser locally..."
+if ! npm install --no-save terser >/dev/null 2>&1; then
+    print_error "Failed to install terser. Check your npm configuration."
+    exit 1
 fi
 
-# Method 4: If all else fails, just use the original (with safe cleanup)
-if [ "$MINIFIED" = false ]; then
-    print_warning "No minifier available, using safe cleanup..."
-    # Safe cleanup: only remove leading whitespace and compress newlines to spaces
-    sed 's/^[[:space:]]*//g' "$INPUT_FILE" | tr '\n' ' ' > "$TEMP_FILE"
-    MINIFIER="safe cleanup"
+print_status "Minifying with terser..."
+if ! npx terser "$INPUT_FILE" --compress --mangle --output "$TEMP_FILE" 2>/dev/null; then
+    print_error "Terser minification failed."
+    exit 1
 fi
+
+MINIFIER="terser"
 
 # Check if minification worked
 if [ ! -s "$TEMP_FILE" ]; then

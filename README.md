@@ -26,8 +26,13 @@ Modify `gdocs-slack.js` to change behavior, then regenerate with the command abo
 
 You can create any bookmarklet with `./js-to-bookmarklet.sh`
 
+## Requirements
+
+- Node.js and npm (required for minification with terser)
+
 ## Troubleshooting
 
 - **"This only works on Google Docs"**: Make sure you're on `docs.google.com/document/...`
 - **"Copy failed"**: Try refreshing the page, fallback copies plain text
 - **Browser compatibility**: Works best in Chrome/Edge, may fall back to plain text in Firefox
+- **"npm is required"**: Install Node.js to get npm and npx

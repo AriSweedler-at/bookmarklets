@@ -20,6 +20,11 @@ function copyDocAsRichLink() {
 
         return navigator.clipboard.write([clipboardItem])
           .then(() => {
+            console.log('📋 Rich link copied:', {
+              URL: docUrl,
+              TEXT: cleanTitle,
+              RICHLINK: richHtml
+            });
             showSuccessNotification('✅ Rich link copied for Slack!');
             return { success: true, title: cleanTitle };
           })
@@ -57,6 +62,12 @@ function fallbackTextCopy(text, title) {
     document.body.removeChild(textarea);
 
     if (success) {
+      const url = text.split(': ')[1];
+      console.log('📋 Plain text copied:', {
+        URL: url,
+        TEXT: title,
+        RICHLINK: null
+      });
       showSuccessNotification('📋 Link copied (plain text)');
       return { success: true, title, fallback: true };
     } else {
@@ -75,11 +86,14 @@ function showSuccessNotification(message) {
 
 // Show error notification
 function showErrorNotification(message) {
-  showNotification(message, '#dc3545', '❌');
+  showNotification(message, '#f8d7da', '❌');
 }
 
 // Generic notification function with smooth animations
 function showNotification(message, bgColor, icon) {
+  // Log to console
+  console.log(message);
+
   // Remove any existing notifications
   const existing = document.querySelector('#gdocs-slack-notification');
   if (existing) {
@@ -89,7 +103,7 @@ function showNotification(message, bgColor, icon) {
   // Create notification element
   const notification = document.createElement('div');
   notification.id = 'gdocs-slack-notification';
-  notification.textContent = `${icon} ${message}`;
+  notification.textContent = message;
 
   // Apply professional styling
   notification.style.cssText = `
@@ -97,9 +111,10 @@ function showNotification(message, bgColor, icon) {
     top: 20px;
     right: 20px;
     background: ${bgColor};
-    color: white;
+    color: ${bgColor === '#f8d7da' ? '#721c24' : 'white'};
     padding: 12px 20px;
     border-radius: 8px;
+    border: 1px solid black;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     font-weight: 500;
