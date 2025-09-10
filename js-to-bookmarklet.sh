@@ -7,6 +7,9 @@
 
 set -e
 
+# Configuration
+BOOKMARKLET_NAME="📋 Copy Doc Link"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,17 +34,17 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if we have input
-if [ -t 0 ]; then
+# Check if we have input from stdin or file
+if [ -t 0 ] && [ $# -eq 0 ]; then
     print_error "No input provided. Please pipe JavaScript code to this script."
     echo "Usage: cat script.js | $0"
     echo "   or: $0 < script.js"
     exit 1
 fi
 
-# Create temporary file for processing
-TEMP_FILE=$(mktemp /tmp/bookmarklet.XXXXXX.js)
-INPUT_FILE=$(mktemp /tmp/input.XXXXXX.js)
+# Create temporary files for processing
+TEMP_FILE=$(mktemp)
+INPUT_FILE=$(mktemp)
 
 # Read stdin to temp file
 cat > "$INPUT_FILE"
@@ -83,7 +86,8 @@ fi
 # Method 3: Try node with a simple minifier
 if [ "$MINIFIED" = false ] && command -v node >/dev/null 2>&1; then
     print_status "Minifying with node (basic)..."
-    cat > /tmp/minify.js << 'EOF'
+    MINIFY_SCRIPT=$(mktemp)
+    cat > "$MINIFY_SCRIPT" << 'EOF'
 const fs = require('fs');
 const input = fs.readFileSync(process.argv[1], 'utf8');
 
@@ -102,19 +106,19 @@ const minified = input
 fs.writeFileSync(process.argv[2], minified);
 EOF
 
-    if node /tmp/minify.js "$INPUT_FILE" "$TEMP_FILE" 2>/dev/null; then
+    if node "$MINIFY_SCRIPT" "$INPUT_FILE" "$TEMP_FILE" 2>/dev/null; then
         MINIFIED=true
         MINIFIER="node (basic)"
     fi
-    rm -f /tmp/minify.js
+    rm -f "$MINIFY_SCRIPT"
 fi
 
-# Method 4: If all else fails, just use the original (with basic cleanup)
+# Method 4: If all else fails, just use the original (with safe cleanup)
 if [ "$MINIFIED" = false ]; then
-    print_warning "No minifier available, using basic cleanup..."
-    # Basic cleanup: remove leading/trailing whitespace and compress spaces
-    sed 's/^[[:space:]]*//g' "$INPUT_FILE" | sed 's/[[:space:]]*$//g' | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' > "$TEMP_FILE"
-    MINIFIER="basic cleanup"
+    print_warning "No minifier available, using safe cleanup..."
+    # Safe cleanup: only remove leading whitespace and compress newlines to spaces
+    sed 's/^[[:space:]]*//g' "$INPUT_FILE" | tr '\n' ' ' > "$TEMP_FILE"
+    MINIFIER="safe cleanup"
 fi
 
 # Check if minification worked
@@ -142,9 +146,15 @@ MINIFIED_CONTENT=$(cat "$TEMP_FILE")
 # We need to wrap the code in an IIFE and handle encoding
 BOOKMARKLET="javascript:(function(){${MINIFIED_CONTENT}})();"
 
-# URL encode special characters that might break bookmarklets
-# Note: We're being conservative here - bookmarklets have character limits and encoding issues
-ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | sed 's/ /%20/g' | sed 's/"/%22/g' | sed 's/</%3C/g' | sed 's/>/%3E/g' | sed 's/#/%23/g')
+# URL encode special characters properly for bookmarklets
+if command -v python3 >/dev/null 2>&1; then
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='():;,'))")
+elif command -v node >/dev/null 2>&1; then
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | node -e "console.log(encodeURIComponent(require('fs').readFileSync(0, 'utf8').trim()))")
+else
+    # Fallback to basic sed encoding
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | sed 's/ /%20/g' | sed 's/"/%22/g' | sed 's/</%3C/g' | sed 's/>/%3E/g' | sed 's/#/%23/g')
+fi
 
 # Show final size
 FINAL_SIZE=${#ENCODED_BOOKMARKLET}
@@ -165,14 +175,21 @@ echo
 echo "$ENCODED_BOOKMARKLET"
 echo
 
+# Use configured bookmarklet name
+print_status "Using bookmarklet name: $BOOKMARKLET_NAME"
+
 # Create HTML file for easy drag-and-drop
-HTML_FILE=$(mktemp /tmp/bookmarklet.XXXXXX.html)
+HTML_FILE=$(mktemp).html
+
+# Create a simple SVG favicon for copy/paste
+FAVICON_SVG='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
 
 cat > "$HTML_FILE" << EOF
 <!DOCTYPE html>
 <html>
 <head>
     <title>Bookmarklet - Ready to Install</title>
+    <link rel="icon" href="$FAVICON_SVG" type="image/svg+xml">
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -193,7 +210,9 @@ cat > "$HTML_FILE" << EOF
             margin-bottom: 30px;
         }
         .bookmarklet-link {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px 40px;
@@ -208,6 +227,11 @@ cat > "$HTML_FILE" << EOF
         .bookmarklet-link:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .copy-icon {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
         }
         .instructions {
             background: #e8f5e8;
@@ -238,11 +262,17 @@ cat > "$HTML_FILE" << EOF
 </head>
 <body>
     <div class="container">
-        <h1>📚 Your Bookmarklet is Ready!</h1>
+        <h1>Your Bookmarklet is Ready!</h1>
 
         <p>Drag the button below to your bookmarks bar in Chrome:</p>
 
-        <a href="$ENCODED_BOOKMARKLET" class="bookmarklet-link">📄 Drag Me to Bookmarks Bar</a>
+        <a href="$ENCODED_BOOKMARKLET" class="bookmarklet-link">
+            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            $BOOKMARKLET_NAME
+        </a>
 
         <div class="instructions">
             <h3>🚀 How to Install:</h3>

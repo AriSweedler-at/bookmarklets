@@ -32,7 +32,7 @@ Create a JavaScript bookmarklet that extracts a Google Doc's title and URL, then
 ```javascript
 // Core functions needed:
 - copyDocAsRichLink() // Main copying logic
-- fallbackTextCopy() // Legacy browser support  
+- fallbackTextCopy() // Legacy browser support
 - showNotification() // User feedback
 - isGoogleDocsPage() // Validation
 - execute() // Entry point with error handling
@@ -76,7 +76,7 @@ Create a JavaScript bookmarklet that extracts a Google Doc's title and URL, then
 
 ### Phase 1: Core JavaScript
 1. Create main copying function with rich text support
-2. Add clipboard API detection and fallbacks  
+2. Add clipboard API detection and fallbacks
 3. Implement user notifications with animations
 4. Add Google Docs page validation
 5. Handle all error cases gracefully

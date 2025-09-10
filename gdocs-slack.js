@@ -1,45 +1,38 @@
-// Google Docs to Slack Rich Link Script
-// This script extracts the document title and URL, then copies as rich text for Slack
-
+// Main function to copy Google Doc as rich link for Slack
 function copyDocAsRichLink() {
   try {
-    // Step 1: Extract clean document title
+    // Extract clean document title (remove " - Google Docs" suffix)
     const rawTitle = document.title;
     const cleanTitle = rawTitle.replace(' - Google Docs', '').trim();
-
-    // Step 2: Get current URL
     const docUrl = window.location.href;
 
-    // Step 3: Create rich text formats
+    // Create rich HTML format for Slack and plain text fallback
     const richHtml = `<a href="${docUrl}">${cleanTitle}</a>`;
     const plainText = `${cleanTitle}: ${docUrl}`;
 
-    // Step 4: Try modern clipboard API first (supports rich text)
-    if (navigator.clipboard && navigator.clipboard.write) {
-      const htmlBlob = new Blob([richHtml], { type: 'text/html' });
-      const textBlob = new Blob([plainText], { type: 'text/plain' });
-
-      const clipboardItem = new ClipboardItem({
-        'text/html': htmlBlob,
-        'text/plain': textBlob
-      });
-
-      return navigator.clipboard.write([clipboardItem])
-        .then(() => {
-          showSuccessNotification('✅ Rich link copied for Slack!');
-          return { success: true, title: cleanTitle };
-        })
-        .catch(() => {
-          // Fallback to plain text if rich text fails
-          return fallbackTextCopy(plainText, cleanTitle);
+    // Try modern Clipboard API first (supports rich text)
+    if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+      try {
+        const clipboardItem = new ClipboardItem({
+          'text/html': new Blob([richHtml], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' })
         });
+
+        return navigator.clipboard.write([clipboardItem])
+          .then(() => {
+            showSuccessNotification('✅ Rich link copied for Slack!');
+            return { success: true, title: cleanTitle };
+          })
+          .catch(() => fallbackTextCopy(plainText, cleanTitle));
+      } catch (clipboardError) {
+        return Promise.resolve(fallbackTextCopy(plainText, cleanTitle));
+      }
     } else {
       // Fallback for older browsers
       return Promise.resolve(fallbackTextCopy(plainText, cleanTitle));
     }
 
   } catch (error) {
-    console.error('Copy failed:', error);
     showErrorNotification('❌ Copy failed: ' + error.message);
     return Promise.resolve({ success: false, error: error.message });
   }
@@ -48,6 +41,7 @@ function copyDocAsRichLink() {
 // Fallback function for older browsers or when rich text fails
 function fallbackTextCopy(text, title) {
   try {
+    // Create hidden textarea for legacy copy method
     const textarea = document.createElement('textarea');
     textarea.value = text;
     textarea.style.position = 'fixed';
@@ -58,6 +52,7 @@ function fallbackTextCopy(text, title) {
     textarea.focus();
     textarea.select();
 
+    // Use deprecated but widely supported execCommand
     const success = document.execCommand('copy');
     document.body.removeChild(textarea);
 
@@ -83,7 +78,7 @@ function showErrorNotification(message) {
   showNotification(message, '#dc3545', '❌');
 }
 
-// Generic notification function
+// Generic notification function with smooth animations
 function showNotification(message, bgColor, icon) {
   // Remove any existing notifications
   const existing = document.querySelector('#gdocs-slack-notification');
@@ -91,11 +86,12 @@ function showNotification(message, bgColor, icon) {
     existing.remove();
   }
 
+  // Create notification element
   const notification = document.createElement('div');
   notification.id = 'gdocs-slack-notification';
-  notification.innerHTML = `${icon} ${message}`;
+  notification.textContent = `${icon} ${message}`;
 
-  // Styling
+  // Apply professional styling
   notification.style.cssText = `
     position: fixed;
     top: 20px;
@@ -124,7 +120,7 @@ function showNotification(message, bgColor, icon) {
     notification.style.opacity = '1';
   });
 
-  // Remove after 3 seconds
+  // Auto-remove after 3 seconds with fade out
   setTimeout(() => {
     notification.style.transform = 'translateX(100%)';
     notification.style.opacity = '0';
@@ -142,16 +138,19 @@ function isGoogleDocsPage() {
          window.location.pathname.includes('/document/');
 }
 
-// Main execution function
+// Main execution function with error handling
 function execute() {
+  // Only run on Google Docs pages
   if (!isGoogleDocsPage()) {
     showErrorNotification('❌ This only works on Google Docs');
-    return Promise.resolve({ success: false, error: 'Not on Google Docs' });
+    return;
   }
 
-  return copyDocAsRichLink();
+  // Execute the main copy function with error handling
+  copyDocAsRichLink().catch(() => {
+    showErrorNotification('❌ Copy failed');
+  });
 }
 
-// Export the main function for bookmarklet
-// When converted to bookmarklet, this will be the entry point
+// Auto-execute when bookmarklet is run
 execute();
