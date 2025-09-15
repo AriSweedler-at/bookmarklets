@@ -262,25 +262,7 @@ cat > "$HTML_FILE" << EOF
             <summary>🔧 Raw Code (for manual creation)</summary>
             <div class="code">$ENCODED_BOOKMARKLET</div>
         </details>
-
-        <p><em>This page will auto-close after you drag the bookmarklet</em></p>
     </div>
-
-    <script>
-        // Optional: Auto-close after successful drag (when focus returns)
-        let dragStarted = false;
-        document.querySelector('.bookmarklet-link').addEventListener('dragstart', () => {
-            dragStarted = true;
-        });
-
-        window.addEventListener('focus', () => {
-            if (dragStarted) {
-                setTimeout(() => {
-                    alert('Bookmarklet installed! You can now close this tab.');
-                }, 500);
-            }
-        });
-    </script>
 </body>
 </html>
 EOF
