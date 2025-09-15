@@ -97,19 +97,19 @@ class DocumentLinkAnswer {
               TEXT: title,
               RICHLINK: null
             });
-            showSuccessNotification('📋 Link copied (plain text)');
+            NotificationSystem.showSuccess('📋 Link copied (plain text)');
             return {success: true, title, fallback: true};
           })
           .catch(() => {
-            showErrorNotification('❌ Copy failed');
+            NotificationSystem.showError('❌ Copy failed');
             return {success: false, error: 'Clipboard API failed'};
           });
       } else {
-        showErrorNotification('❌ Copy failed - clipboard not supported');
+        NotificationSystem.showError('❌ Copy failed - clipboard not supported');
         return {success: false, error: 'Clipboard API not available'};
       }
     } catch (error) {
-      showErrorNotification('❌ Copy failed');
+      NotificationSystem.showError('❌ Copy failed');
       return {success: false, error: error.message};
     }
   }
@@ -129,7 +129,7 @@ class DocumentLinkAnswer {
 
     // Check for modern Clipboard API support
     if (!navigator.clipboard || !navigator.clipboard.write || !window.ClipboardItem) {
-      showWarningNotification('⚠️ Browser lacks rich link support, using plain text');
+      NotificationSystem.showWarning('⚠️ Browser lacks rich link support, using plain text');
       return this.fallbackTextCopy(options);
     }
 
@@ -147,18 +147,18 @@ class DocumentLinkAnswer {
           RICHLINK: richHtml
         });
 
-        showSuccessNotification(`✅ Rich link copied for Slack! "${this.getPreview(options)}"`);
+        NotificationSystem.showSuccess(`✅ Rich link copied for Slack! "${this.getPreview(options)}"`);
         return {success: true, title: finalTitle};
       } catch (error) {
         // Check for document focus errors and try workaround
         if (error.message && error.message.includes('Document is not focused')) {
           return await this._attemptFocusWorkaround(clipboardItem, options);
         }
-        showWarningNotification('⚠️ Rich link failed, using plain text: ' + (error.message || 'Clipboard API error'));
+        NotificationSystem.showWarning('⚠️ Rich link failed, using plain text: ' + (error.message || 'Clipboard API error'));
         return this.fallbackTextCopy(options);
       }
     } catch (clipboardError) {
-      showWarningNotification('⚠️ Rich link not supported, using plain text: ' + (clipboardError.message || 'ClipboardItem error'));
+      NotificationSystem.showWarning('⚠️ Rich link not supported, using plain text: ' + (clipboardError.message || 'ClipboardItem error'));
       return this.fallbackTextCopy(options);
     }
   }
@@ -200,44 +200,112 @@ class DocumentLinkAnswer {
           RICHLINK: this.toRichText(options)
         });
 
-        showSuccessNotification(`✅ Rich link copied for Slack! (auto-focused) "${this.getPreview(options)}"`);
+        NotificationSystem.showSuccess(`✅ Rich link copied for Slack! (auto-focused) "${this.getPreview(options)}"`);
         return {success: true, title: this.getFinalTitle(options)};
       } catch {
         // Focus workaround failed, fall back to plain text
-        showWarningNotification('⚠️ Focus workaround failed, using plain text');
+        NotificationSystem.showWarning('⚠️ Focus workaround failed, using plain text');
         return this.fallbackTextCopy(options);
       }
 
     } catch (error) {
       // Workaround failed, fall back to plain text
-      showWarningNotification('⚠️ Focus workaround failed, using plain text');
+      NotificationSystem.showWarning('⚠️ Focus workaround failed, using plain text');
       return this.fallbackTextCopy(options);
     }
   }
 }
 
 /**
- * Shows a success notification
- * @param {string} message - Message to display
+ * Class representing a notification system with smooth animations
  */
-function showSuccessNotification(message) {
-  showNotification(message, '#28a745');
-}
+class NotificationSystem {
+  /**
+   * Shows a success notification
+   * @param {string} message - Message to display
+   */
+  static showSuccess(message) {
+    this.show(message, '#28a745');
+  }
 
-/**
- * Shows an error notification
- * @param {string} message - Message to display
- */
-function showErrorNotification(message) {
-  showNotification(message, '#f8d7da');
-}
+  /**
+   * Shows an error notification
+   * @param {string} message - Message to display
+   */
+  static showError(message) {
+    this.show(message, '#f8d7da');
+  }
 
-/**
- * Shows a warning notification
- * @param {string} message - Message to display
- */
-function showWarningNotification(message) {
-  showNotification(message, '#fff3cd');
+  /**
+   * Shows a warning notification
+   * @param {string} message - Message to display
+   */
+  static showWarning(message) {
+    this.show(message, '#fff3cd');
+  }
+
+  /**
+   * Generic notification display with smooth animations
+   * @param {string} message - Message to display
+   * @param {string} bgColor - Background color for notification
+   * @throws {Error} May throw DOM manipulation errors
+   */
+  static show(message, bgColor) {
+    // Log to console
+    console.log(message);
+
+    // Remove any existing notifications
+    const existing = document.querySelector('#gdocs-slack-notification');
+    if (existing) {
+      existing.remove();
+    }
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.id = 'gdocs-slack-notification';
+    notification.textContent = message;
+
+    // Apply professional styling
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: ${bgColor};
+      color: ${bgColor === '#f8d7da' ? '#721c24' : bgColor === '#fff3cd' ? '#856404' : 'white'};
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid black;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 10000;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      transform: translateX(100%);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      max-width: 300px;
+      word-wrap: break-word;
+    `;
+
+    document.body.appendChild(notification);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      notification.style.transform = 'translateX(0)';
+      notification.style.opacity = '1';
+    });
+
+    // Auto-remove after 3 seconds with fade out
+    setTimeout(() => {
+      notification.style.transform = 'translateX(100%)';
+      notification.style.opacity = '0';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 3000);
+  }
 }
 
 /**
@@ -336,69 +404,6 @@ function getHeadingFromUrl() {
 }
 
 
-/**
- * Generic notification function with smooth animations
- * @param {string} message - Message to display
- * @param {string} bgColor - Background color for notification
- * @param {string} icon - Icon to show
- * @throws {Error} May throw DOM manipulation errors
- */
-function showNotification(message, bgColor) {
-  // Log to console
-  console.log(message);
-
-  // Remove any existing notifications
-  const existing = document.querySelector('#gdocs-slack-notification');
-  if (existing) {
-    existing.remove();
-  }
-
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.id = 'gdocs-slack-notification';
-  notification.textContent = message;
-
-  // Apply professional styling
-  notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: ${bgColor};
-    color: ${bgColor === '#f8d7da' ? '#721c24' : bgColor === '#fff3cd' ? '#856404' : 'white'};
-    padding: 12px 20px;
-    border-radius: 8px;
-    border: 1px solid black;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 10000;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    transform: translateX(100%);
-    transition: transform 0.3s ease, opacity 0.3s ease;
-    opacity: 0;
-    max-width: 300px;
-    word-wrap: break-word;
-  `;
-
-  document.body.appendChild(notification);
-
-  // Animate in
-  requestAnimationFrame(() => {
-    notification.style.transform = 'translateX(0)';
-    notification.style.opacity = '1';
-  });
-
-  // Auto-remove after 3 seconds with fade out
-  setTimeout(() => {
-    notification.style.transform = 'translateX(100%)';
-    notification.style.opacity = '0';
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.parentNode.removeChild(notification);
-      }
-    }, 300);
-  }, 3000);
-}
 
 /**
  * Validation function to check if we're on Google Docs
@@ -527,17 +532,17 @@ async function copyDocAsRichLink() {
 function execute() {
   // Only run on Google Docs pages
   if (!isGoogleDocsPage()) {
-    showErrorNotification('❌ This only works on Google Docs');
+    NotificationSystem.showError('❌ This only works on Google Docs');
     return;
   }
 
   // Execute the main copy function with error handling
   try {
     copyDocAsRichLink().catch(() => {
-      showErrorNotification('❌ Copy failed');
+      NotificationSystem.showError('❌ Copy failed');
     });
   } catch (error) {
-    showErrorNotification('❌ Copy failed: ' + error.message);
+    NotificationSystem.showError('❌ Copy failed: ' + error.message);
   }
 }
 

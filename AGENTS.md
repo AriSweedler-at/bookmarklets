@@ -3,6 +3,61 @@
 ## Overview
 Create a JavaScript bookmarklet that extracts a Google Doc's title and URL, then copies it as rich text that pastes beautifully in Slack with the document title as clickable display text.
 
+## Code Architecture
+
+### Core Components
+
+#### 1. DocumentLinkAnswer Class
+The central data structure that represents a document link with rich formatting capabilities:
+
+- **Constructor**: Takes title, URL, and optional heading text
+- **Rich Text Conversion**: `toRichText()` generates HTML links for Slack
+- **Plain Text Fallback**: `toPlainText()` provides fallback formatting
+- **Clipboard Integration**: `toClipboard()` handles modern and legacy clipboard APIs
+- **Focus Workaround**: `_attemptFocusWorkaround()` resolves browser focus issues
+- **Duplicate Detection**: Works with `isDuplicate()` to prevent redundant copies
+
+#### 2. NotificationSystem Class
+Professional user feedback with smooth animations:
+- `showSuccess()`: Green success messages
+- `showError()`: Red error alerts
+- `showWarning()`: Yellow warning messages
+- `show()`: Generic notification display with animated slide-in/out effects and auto-cleanup
+
+#### 3. Heading Detection System
+Smart extraction of document section context
+
+#### 4. Main Execution Pipeline
+- `isGoogleDocsPage()`: Validates execution context
+- `getAnswer()`: Extracts document metadata
+- `isDuplicate()`: Prevents redundant clipboard operations
+- `copyDocAsRichLink()`: Orchestrates the copy operation
+- `execute()`: Entry point with error handling
+
+### Data Flow
+1. **Validation**: Check if running on Google Docs page
+2. **Extraction**: Get document title, URL, and heading context
+3. **Deduplication**: Compare with existing clipboard content
+4. **Formatting**: Create both rich HTML and plain text versions
+5. **Clipboard**: Use modern API with legacy fallbacks
+6. **Feedback**: Show user notification with operation result
+
+### Build Pipeline (js-to-bookmarklet.sh)
+
+#### Processing Pipeline
+1. **Input Validation**: Check for JavaScript source and required tools
+2. **Minification**: Use terser for optimal compression
+3. **Encoding**: URL encode for `javascript:` protocol compatibility
+4. **HTML Generation**: Create drag-and-drop installation page
+5. **Browser Launch**: Auto-open with bookmarklet ready for installation
+
+#### Features
+- **Multi-platform Minification**: Prefers terser, falls back gracefully
+- **Size Optimization**: Warns about browser limits and provides stats
+- **Cross-platform Browser Detection**: Handles Chrome/Chromium/Safari across OS
+- **Professional Installation UX**: Beautiful HTML page with clear instructions
+- **Customizable Naming**: Environment variable for bookmarklet titles
+
 ## Requirements
 
 ### Core Functionality
