@@ -1,11 +1,28 @@
-# Google Docs to Slack Rich Link Bookmarklet
+# Bookmarklet Compiler & Google Docs Rich Link
 
-Creates clickable links in Slack from Google Docs with the document title as link text. Automatically detects document sections and provides smart header handling.
+A modular system for creating JavaScript bookmarklets with shared libraries. Includes a Google Docs to Slack rich link bookmarklet that creates clickable links with smart header detection.
 
 ## Quick Start
 
 ```bash
-cat gdocs-slack.js | ./js-to-bookmarklet.sh
+bin/js-to-bookmarklet gdocs-slack
+```
+
+## Project Structure
+
+```
+📁 src/                           # Source code directory
+  ├── bookmarklet/                # Individual bookmarklet files
+  │   ├── gdocs-slack.js         # Google Docs rich link bookmarklet
+  │   ├── github-autoscroll.js   # GitHub PR auto-scroll tool
+  │   └── no-op.js               # Simple test bookmarklet
+  └── js-lib/                    # Shared libraries (auto-included)
+      └── notifications.js       # Notification system
+
+📁 bin/                          # Executable scripts
+  └── js-to-bookmarklet          # Bookmarklet compiler
+
+🔧 .recent-bookmarklet           # Tracks most recently compiled file
 ```
 
 1. Chrome opens with installation page
@@ -32,16 +49,24 @@ cat gdocs-slack.js | ./js-to-bookmarklet.sh
 
 ## Customization
 
-### Change the bookmarklet name
+### Environment Variables
+Customize the compiler behavior with these environment variables:
+
 ```bash
-export BOOKMARKLET_NAME="📄 My Custom Name"
-cat gdocs-slack.js | ./js-to-bookmarklet.sh
+# Custom emoji for bookmarklet names
+JS2BM_EMOJI="🔍" bin/js-to-bookmarklet github-autoscroll
+
+# Custom source directories
+JS2BM_JS_DIR="scripts" JS2BM_JS_LIB_DIR="shared" bin/js-to-bookmarklet my-tool
+
+# Default usage (uses built-in defaults)
+bin/js-to-bookmarklet gdocs-slack
 ```
 
 ### Edit the JavaScript
-Modify `gdocs-slack.js` to change behavior, then regenerate with the command above.
+Modify files in `src/bookmarklet/` to change behavior, then regenerate with the command above.
 
-You can create any bookmarklet with `./js-to-bookmarklet.sh`
+You can create any bookmarklet with `bin/js-to-bookmarklet`
 
 ## Requirements
 

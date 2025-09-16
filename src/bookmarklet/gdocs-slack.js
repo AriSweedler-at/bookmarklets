@@ -22,13 +22,28 @@ class DocumentLinkAnswer {
   }
 
   /**
+   * Get the URL with optional hash stripping
+   * @param {Object} [options={}] - Configuration options
+   * @param {boolean} [options.includeHeader=true] - Whether to include hash in URL
+   * @returns {string} URL with or without hash
+   */
+  getUrl(options = {}) {
+    const {includeHeader = true} = options;
+    if (includeHeader) {
+      return this.url;
+    }
+    // Strip hash fragment when not including header
+    return this.url.split('#')[0];
+  }
+
+  /**
    * Convert to rich HTML format
    * @param {Object} [options={}] - Configuration options
    * @param {boolean} [options.includeHeader=false] - Whether to include heading in link text
    * @returns {string} HTML formatted link
    */
   toRichText(options = {}) {
-    return `<a href="${this.url}">${this.getFinalTitle(options)}</a>`;
+    return `<a href="${this.getUrl(options)}">${this.getFinalTitle(options)}</a>`;
   }
 
   /**
@@ -40,7 +55,7 @@ class DocumentLinkAnswer {
   toPlainText(options = {}) {
     const {includeHeader = true} = options;
     const title = includeHeader ? this.getFinalTitle(options) : this.title;
-    return `${title}: ${this.url}`;
+    return `${title}: ${this.getUrl(options)}`;
   }
 
   /**
@@ -55,14 +70,14 @@ class DocumentLinkAnswer {
   }
 
   /**
-   * Get preview text for notifications (first 50 chars of plain text)
+   * Get preview text for notifications (just the title, no URL)
    * @param {Object} [options={}] - Configuration options
    * @param {boolean} [options.includeHeader=true] - Whether to include heading
-   * @returns {string} Truncated preview text
+   * @returns {string} Title only for preview
    */
   getPreview(options = {}) {
-    const plainText = this.toPlainText(options);
-    return plainText.length > 50 ? plainText.substring(0, 47) + '...' : plainText;
+    const title = this.getFinalTitle(options);
+    return title.length > 50 ? title.substring(0, 47) + '...' : title;
   }
 
   /**
@@ -146,7 +161,6 @@ class DocumentLinkAnswer {
           TEXT: finalTitle,
           RICHLINK: richHtml
         });
-
         NotificationSystem.showSuccess(`✅ Rich link copied for Slack! "${this.getPreview(options)}"`);
         return {success: true, title: finalTitle};
       } catch (error) {
@@ -199,7 +213,6 @@ class DocumentLinkAnswer {
           TEXT: this.getFinalTitle(options),
           RICHLINK: this.toRichText(options)
         });
-
         NotificationSystem.showSuccess(`✅ Rich link copied for Slack! (auto-focused) "${this.getPreview(options)}"`);
         return {success: true, title: this.getFinalTitle(options)};
       } catch {
@@ -217,114 +230,16 @@ class DocumentLinkAnswer {
 }
 
 /**
- * Class representing a notification system with smooth animations
- */
-class NotificationSystem {
-  /**
-   * Shows a success notification
-   * @param {string} message - Message to display
-   */
-  static showSuccess(message) {
-    this.show(message, '#28a745');
-  }
-
-  /**
-   * Shows an error notification
-   * @param {string} message - Message to display
-   */
-  static showError(message) {
-    this.show(message, '#f8d7da');
-  }
-
-  /**
-   * Shows a warning notification
-   * @param {string} message - Message to display
-   */
-  static showWarning(message) {
-    this.show(message, '#fff3cd');
-  }
-
-  /**
-   * Generic notification display with smooth animations
-   * @param {string} message - Message to display
-   * @param {string} bgColor - Background color for notification
-   * @throws {Error} May throw DOM manipulation errors
-   */
-  static show(message, bgColor) {
-    // Log to console
-    console.log(message);
-
-    // Remove any existing notifications
-    const existing = document.querySelector('#gdocs-slack-notification');
-    if (existing) {
-      existing.remove();
-    }
-
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.id = 'gdocs-slack-notification';
-    notification.textContent = message;
-
-    // Apply professional styling
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${bgColor};
-      color: ${bgColor === '#f8d7da' ? '#721c24' : bgColor === '#fff3cd' ? '#856404' : 'white'};
-      padding: 12px 20px;
-      border-radius: 8px;
-      border: 1px solid black;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      z-index: 10000;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-      transform: translateX(100%);
-      transition: transform 0.3s ease, opacity 0.3s ease;
-      opacity: 0;
-      max-width: 300px;
-      word-wrap: break-word;
-    `;
-
-    document.body.appendChild(notification);
-
-    // Animate in
-    requestAnimationFrame(() => {
-      notification.style.transform = 'translateX(0)';
-      notification.style.opacity = '1';
-    });
-
-    // Auto-remove after 3 seconds with fade out
-    setTimeout(() => {
-      notification.style.transform = 'translateX(100%)';
-      notification.style.opacity = '0';
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, 300);
-    }, 3000);
-  }
-}
-
-/**
- * Dereferences a heading ID to actual heading text by searching the DOM
- * @param {string} headingId - The heading ID to search for
+ * Gets the currently highlighted heading text from Google Docs navigation
  * @returns {string|null} The heading text if found, null otherwise
  * @throws {Error} May throw DOM query errors
  */
-function dereferenceHeading() {
-  console.log(`🔍 dereferenceHeading: Looking for highlighted navigation item`);
-
+function getCurrentHeading() {
   // Look for the highlighted navigation item in Google Docs outline
   const highlightedItem = document.querySelector('.navigation-item.location-indicator-highlight');
   if (!highlightedItem) {
-    console.log('🔍 No highlighted navigation item found');
-    console.log(`❌ dereferenceHeading: FAILED - No heading text found`);
     return null;
   }
-  console.log('🔍 Found highlighted navigation item:', highlightedItem);
 
   // Extract the heading text from the tooltip or content
   const contentContainer = highlightedItem.querySelector('.navigation-item-content-container');
@@ -332,18 +247,13 @@ function dereferenceHeading() {
 
   // Try to get text from data-tooltip first (most reliable)
   if (content && content.dataset.tooltip) {
-    const headingText = content.dataset.tooltip;
-    console.log(`🔍 Found heading text from tooltip: "${headingText}"`);
-    console.log(`✅ dereferenceHeading: SUCCESS - Found heading: "${headingText}"`);
-    return headingText;
+    return content.dataset.tooltip;
   }
 
   // Fallback to text content
   if (content) {
     const headingText = content.textContent?.trim();
     if (headingText) {
-      console.log(`🔍 Found heading text from content: "${headingText}"`);
-      console.log(`✅ dereferenceHeading: SUCCESS - Found heading: "${headingText}"`);
       return headingText;
     }
   }
@@ -353,57 +263,12 @@ function dereferenceHeading() {
     const ariaLabel = contentContainer.getAttribute('aria-label');
     if (ariaLabel) {
       // Remove the level information (e.g., "Team rituals level 2" -> "Team rituals")
-      const headingText = ariaLabel.replace(/ level \d+$/, '');
-      console.log(`🔍 Found heading text from aria-label: "${headingText}"`);
-      console.log(`✅ dereferenceHeading: SUCCESS - Found heading: "${headingText}"`);
-      return headingText;
+      return ariaLabel.replace(/ level \d+$/, '');
     }
   }
 
-  console.log(`❌ dereferenceHeading: FAILED - No heading text found`);
   return null;
 }
-
-/**
- * Extracts heading information from the current URL hash
- * @returns {Object|null} Object with id and text properties, or null if no heading found
- */
-function getHeadingFromUrl() {
-  console.log('🔗 getHeadingFromUrl: Checking URL for heading anchor...');
-  console.log('🔗 Current URL:', window.location.href);
-  console.log('🔗 URL hash:', window.location.hash);
-
-  const hash = window.location.hash;
-  if (hash && hash.includes('heading=')) {
-    const headingId = hash.split('heading=')[1];
-    console.log('🔗 Extracted heading ID:', headingId);
-
-    let headingText = null;
-    try {
-      headingText = dereferenceHeading();
-    } catch (error) {
-      console.log('🔗 Error dereferencing heading:', error);
-    }
-
-    const heading = {
-      id: headingId,
-      text: headingText
-    };
-
-    if (headingText) {
-      console.log(`✅ User has selected header ${headingText}`);
-    } else {
-      console.log(`⚠️ User has selected header with ID: ${headingId}`);
-    }
-
-    return heading;
-  }
-
-  console.log('🔗 No heading found in URL');
-  return null;
-}
-
-
 
 /**
  * Validation function to check if we're on Google Docs
@@ -424,9 +289,13 @@ function getAnswer() {
   const cleanTitle = rawTitle.replace(' - Google Docs', '').trim();
   const docUrl = window.location.href;
 
-  // Check if URL contains a heading anchor
-  const heading = getHeadingFromUrl();
-  const headingText = heading && heading.text ? heading.text : null;
+  // Get current heading from navigation if available
+  let headingText = null;
+  try {
+    headingText = getCurrentHeading();
+  } catch (error) {
+    // Silent error handling
+  }
 
   return new DocumentLinkAnswer(cleanTitle, docUrl, headingText);
 }
@@ -437,32 +306,34 @@ function getAnswer() {
  * @returns {Promise<boolean>} True if clipboard contains the same content
  */
 async function isDuplicate(answer) {
-  console.log('🔍 isDuplicate: Starting duplicate check');
-
   if (!navigator.clipboard || !navigator.clipboard.read) {
-    console.log('🔍 isDuplicate: Clipboard read API not available');
     return false;
   }
 
   try {
-    console.log('🔍 isDuplicate: Reading clipboard content...');
     const clipboardItems = await navigator.clipboard.read();
 
     for (const clipboardItem of clipboardItems) {
-      console.log('🔍 isDuplicate: Available clipboard types:', [...clipboardItem.types]);
+      // If no types available, skip to fallback
+      if (clipboardItem.types.length === 0) {
+        break;
+      }
 
       // Try to read HTML content first
       if (clipboardItem.types.includes('text/html')) {
         const htmlBlob = await clipboardItem.getType('text/html');
         const htmlText = await htmlBlob.text();
-        const expectedHtml = answer.toRichText();
+        const expectedHtml = answer.toRichText({includeHeader: true}); // Always check WITH header
 
-        console.log('🔍 isDuplicate: Clipboard HTML:', JSON.stringify(htmlText));
-        console.log('🔍 isDuplicate: Expected HTML:', JSON.stringify(expectedHtml));
-        console.log('🔍 isDuplicate: HTML equal?', htmlText === expectedHtml);
+        // Remove meta charset prefix and normalize HTML entities
+        const cleanClipboardHtml = htmlText.replace(/^<meta charset="utf-8">/, '');
 
-        if (htmlText === expectedHtml) {
-          console.log('🔄 Same content detected - clipboard HTML matches');
+        // Normalize both to the same entity encoding for comparison
+        const normalizeEntities = (html) => html.replace(/&amp;/g, '&').replace(/&/g, '&amp;');
+        const normalizedClipboard = normalizeEntities(cleanClipboardHtml);
+        const normalizedExpected = normalizeEntities(expectedHtml);
+
+        if (normalizedClipboard === normalizedExpected) {
           return true;
         }
       }
@@ -471,43 +342,32 @@ async function isDuplicate(answer) {
       if (clipboardItem.types.includes('text/plain')) {
         const textBlob = await clipboardItem.getType('text/plain');
         const plainText = await textBlob.text();
-        const expectedText = answer.toPlainText();
-
-        console.log('🔍 isDuplicate: Clipboard plain text:', JSON.stringify(plainText));
-        console.log('🔍 isDuplicate: Expected plain text:', JSON.stringify(expectedText));
-        console.log('🔍 isDuplicate: Plain text equal?', plainText === expectedText);
+        const expectedText = answer.toPlainText({includeHeader: true}); // Always check WITH header
 
         if (plainText === expectedText) {
-          console.log('🔄 Same content detected - clipboard plain text matches');
           return true;
         }
       }
     }
-
-    console.log('🔍 isDuplicate: No matching content found');
   } catch (error) {
-    // Clipboard read failed, try fallback with readText
-    console.log('📋 Clipboard read failed, trying readText fallback:', error.message);
-
-    try {
-      if (navigator.clipboard.readText) {
-        const clipboardText = await navigator.clipboard.readText();
-        const expectedText = answer.toPlainText();
-
-        console.log('🔍 isDuplicate: Fallback clipboard content:', JSON.stringify(clipboardText));
-        console.log('🔍 isDuplicate: Fallback expected content:', JSON.stringify(expectedText));
-
-        if (clipboardText === expectedText) {
-          console.log('🔄 Same content detected - fallback match');
-          return true;
-        }
-      }
-    } catch (fallbackError) {
-      console.log('📋 Fallback readText also failed:', fallbackError.message);
-    }
+    // Silent error handling, fall through to readText fallback
   }
 
-  console.log('🔍 isDuplicate: Returning false');
+  // Always try fallback readText for better reliability
+  try {
+    if (navigator.clipboard.readText) {
+      const clipboardText = await navigator.clipboard.readText();
+      const expectedWithHeader = answer.toPlainText({includeHeader: true}); // Always check WITH header
+
+      // For plain text fallback, only return true for WITH header matches (to maintain toggle behavior)
+      if (clipboardText === expectedWithHeader) {
+        return true;
+      }
+    }
+  } catch (fallbackError) {
+    // Silent fallback failure
+  }
+
   return false;
 }
 
@@ -523,7 +383,6 @@ async function copyDocAsRichLink() {
   const duplicate = await isDuplicate(answer);
   return await answer.toClipboard({includeHeader: !duplicate});
 }
-
 
 /**
  * Main execution function with error handling

@@ -42,7 +42,7 @@ Smart extraction of document section context
 5. **Clipboard**: Use modern API with legacy fallbacks
 6. **Feedback**: Show user notification with operation result
 
-### Build Pipeline (js-to-bookmarklet.sh)
+### Build Pipeline (bin/js-to-bookmarklet)
 
 #### Processing Pipeline
 1. **Input Validation**: Check for JavaScript source and required tools
@@ -123,7 +123,7 @@ Smart extraction of document section context
 ```
 /
 ├── gdocs-slack.js          # Core JavaScript functionality
-├── js-to-bookmarklet.sh    # Conversion and installation script
+├── bin/js-to-bookmarklet   # Conversion and installation script
 └── AGENTS.md              # This specification file
 ```
 
@@ -153,7 +153,7 @@ Smart extraction of document section context
 ## Usage Workflow
 ```bash
 # Development
-cat gdocs-slack.js | ./js-to-bookmarklet.sh
+bin/js-to-bookmarklet gdocs-slack
 
 # User Experience
 1. Script prompts for bookmarklet name

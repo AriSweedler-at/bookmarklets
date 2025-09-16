@@ -1,0 +1,483 @@
+#!/bin/bash
+
+# js-to-bookmarklet
+# Converts JavaScript files to bookmarklet format with shared library support
+
+set -e
+
+# Minimal log lib
+c_red='\033[31m'; c_green='\033[32m'; c_rst='\033[0m'
+log::err()  { echo -e "${c_red}[ERROR] ${c_rst}" "$@" >&2 ; }
+log::info() { echo -e "${c_green}[INFO] ${c_rst}" "$@" >&2 ; }
+
+# Configuration
+RECENT_FILE=".recent-bookmarklet"
+JS_DIR="${JS2BM_JS_DIR:-src/bookmarklet}"
+JS_LIB_DIR="${JS2BM_JS_LIB_DIR:-src/js-lib}"
+BOOKMARKLET_EMOJI="${JS2BM_EMOJI:-📋}"
+
+# Help text
+show_help() {
+    cat << EOF
+js-to-bookmarklet - Compile JavaScript files into browser bookmarklets
+
+USAGE:
+    js-to-bookmarklet [OPTIONS] [FILENAME]
+
+ARGUMENTS:
+    FILENAME    JavaScript file to compile (without .js extension)
+                If not provided, uses most recent or opens fzf selector
+
+OPTIONS:
+    -h, --help  Show this help message
+
+DESCRIPTION:
+    Compiles JavaScript files from the 'src/bookmarklet/' directory into minified bookmarklets.
+    Automatically prepends shared libraries from 'src/js-lib/' directory to all bookmarklets.
+
+    The script will:
+    1. Combine shared libraries (src/js-lib/*.js) with your main file
+    2. Minify the combined JavaScript using terser
+    3. URL-encode it as a bookmarklet
+    4. Generate an HTML file for easy drag-and-drop installation
+    5. Open the result in your browser
+
+EXAMPLES:
+    js-to-bookmarklet gdocs-slack                    # Compile specific file
+    js-to-bookmarklet                               # Use recent file or select with fzf
+    JS2BM_EMOJI="🔍" js-to-bookmarklet github-autoscroll  # Custom emoji
+    JS2BM_JS_DIR="scripts" js-to-bookmarklet my-tool      # Custom source directory
+
+FILE SELECTION:
+    - With filename: Uses specified file from src/bookmarklet/ directory
+    - No filename + recent file exists: Uses most recently compiled file
+    - No filename + no recent file: Opens fzf for interactive selection
+
+REQUIREMENTS:
+    - Node.js and npm (for terser minification)
+    - fzf (for interactive file selection when no filename provided)
+    - src/bookmarklet/ directory with .js files
+    - src/js-lib/ directory with shared libraries (optional)
+
+ENVIRONMENT VARIABLES:
+    JS2BM_EMOJI          Customize the emoji used in bookmarklet names (default: 📋)
+    JS2BM_JS_DIR         Directory containing JavaScript source files (default: src/bookmarklet)
+    JS2BM_JS_LIB_DIR     Directory containing shared library files (default: src/js-lib)
+
+EOF
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -*)
+            log::err "Unknown option: $1"
+            echo "Use -h or --help for usage information" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -n "${FILENAME:-}" ]]; then
+                log::err "Too many arguments. Only one filename is allowed."
+                exit 1
+            fi
+            FILENAME="$1"
+            ;;
+    esac
+    shift
+done
+
+# Function to get list of available JS files
+get_js_files() {
+    if [ ! -d "$JS_DIR" ]; then
+        log::err "JS directory '$JS_DIR' not found"
+        exit 1
+    fi
+
+    find "$JS_DIR" -name "*.js" -type f | sed "s|^$JS_DIR/||" | sort
+}
+
+# Function to select file with fzf
+select_with_fzf() {
+    if ! command -v fzf >/dev/null 2>&1; then
+        log::err "fzf is required for file selection but not installed"
+        log::err "Install fzf or specify a filename directly"
+        exit 1
+    fi
+
+    local files
+    files=$(get_js_files)
+
+    if [ -z "$files" ]; then
+        log::err "No JS files found in '$JS_DIR' directory"
+        exit 1
+    fi
+
+    echo "$files" | fzf --prompt="Select bookmarklet: " --height=40% --border
+}
+
+# Function to get the target JS file
+get_target_file() {
+    local target_file=""
+
+    if [[ -n "${FILENAME:-}" ]]; then
+        # Argument provided
+        target_file="$FILENAME"
+        # Remove .js extension if provided, and remove js/ prefix if provided
+        target_file="${target_file%.js}"
+        target_file="${target_file#js/}"
+    elif [ -f "$RECENT_FILE" ]; then
+        # Use most recent file
+        target_file=$(cat "$RECENT_FILE" 2>/dev/null || echo "")
+    fi
+
+    # If still no file, use fzf to select
+    if [ -z "$target_file" ]; then
+        log::info "No file specified, using fzf to select..."
+        target_file=$(select_with_fzf)
+    fi
+
+    # Add .js extension if not present
+    if [[ "$target_file" != *.js ]]; then
+        target_file="${target_file}.js"
+    fi
+
+    echo "$target_file"
+}
+
+# Function to save recent file
+save_recent_file() {
+    local filename="$1"
+    # Remove .js extension for storage
+    filename="${filename%.js}"
+    echo "$filename" > "$RECENT_FILE"
+}
+
+# Function to concatenate js-lib files with main file
+create_combined_file() {
+    local target_file="$1"
+    local temp_file="$2"
+
+    # First, add all js-lib files
+    if [ -d "$JS_LIB_DIR" ]; then
+        log::info "Including shared libraries from $JS_LIB_DIR..."
+        find "$JS_LIB_DIR" -name "*.js" -type f | sort | while read -r lib_file; do
+            echo "// === $(basename "$lib_file") ===" >> "$temp_file"
+            cat "$lib_file" >> "$temp_file"
+            echo "" >> "$temp_file"  # Add blank line between files
+        done
+    else
+        log::info "No js-lib directory found, skipping shared libraries"
+    fi
+
+    # Then add the main file
+    local main_file="$JS_DIR/$target_file"
+    if [ ! -f "$main_file" ]; then
+        log::err "File not found: $main_file"
+        exit 1
+    fi
+
+    echo "// === Main: $(basename "$main_file") ===" >> "$temp_file"
+    cat "$main_file" >> "$temp_file"
+
+    log::info "Combined $(basename "$main_file") with shared libraries"
+}
+
+# Main script starts here
+log::info "JS-to-Bookmarklet Compiler"
+
+# Get target file
+TARGET_FILE=$(get_target_file)
+
+# Validate target file exists
+if [ ! -f "$JS_DIR/$TARGET_FILE" ]; then
+    log::err "File not found: $JS_DIR/$TARGET_FILE"
+    available_files=$(get_js_files)
+    if [ -n "$available_files" ]; then
+        log::err "Available files:"
+        echo "$available_files" | sed 's/^/  /' >&2
+    fi
+    exit 1
+fi
+
+if [ -f "$RECENT_FILE" ] && [[ -z "${FILENAME:-}" ]]; then
+    log::info "Using most recent file: $TARGET_FILE"
+else
+    log::info "Selected file: $TARGET_FILE"
+fi
+
+# Save as most recent
+save_recent_file "$TARGET_FILE"
+
+# Create temporary files for processing
+TEMP_FILE=$(mktemp)
+INPUT_FILE=$(mktemp)
+
+# Create combined file with js-lib + main file
+create_combined_file "$TARGET_FILE" "$INPUT_FILE"
+
+# Check if the input file has content
+if [ ! -s "$INPUT_FILE" ]; then
+    log::err "Combined input is empty"
+    rm -f "$TEMP_FILE" "$INPUT_FILE"
+    exit 1
+fi
+
+# Show input size
+INPUT_SIZE=$(wc -c < "$INPUT_FILE")
+log::info "Combined input size: ${INPUT_SIZE} bytes"
+
+# Check for npm/npx
+if ! command -v npm >/dev/null 2>&1; then
+    log::err "npm is required but not installed. Please install Node.js and npm."
+    exit 1
+fi
+
+if ! command -v npx >/dev/null 2>&1; then
+    log::err "npx is required but not installed. Please update Node.js/npm to get npx."
+    exit 1
+fi
+
+# Install and use terser for minification
+log::info "Installing terser locally..."
+if ! npm install --no-save terser >/dev/null 2>&1; then
+    log::err "Failed to install terser. Check your npm configuration."
+    exit 1
+fi
+
+log::info "Minifying with terser..."
+if ! npx terser "$INPUT_FILE" --compress --mangle --output "$TEMP_FILE" 2>/dev/null; then
+    log::err "Terser minification failed."
+    exit 1
+fi
+
+MINIFIER="terser"
+
+# Check if minification worked
+if [ ! -s "$TEMP_FILE" ]; then
+    log::err "Minification failed, using original"
+    cp "$INPUT_FILE" "$TEMP_FILE"
+fi
+
+# Show minified size
+MINIFIED_SIZE=$(wc -c < "$TEMP_FILE")
+if [ "$INPUT_SIZE" -gt 0 ]; then
+    COMPRESSION_RATIO=$(echo "scale=1; ($INPUT_SIZE - $MINIFIED_SIZE) * 100 / $INPUT_SIZE" | bc 2>/dev/null || echo "N/A")
+    log::info "Minified with $MINIFIER: ${MINIFIED_SIZE} bytes (${COMPRESSION_RATIO}% smaller)"
+else
+    log::info "Minified with $MINIFIER: ${MINIFIED_SIZE} bytes"
+fi
+
+# Create the bookmarklet
+log::info "Creating bookmarklet..."
+
+# Read the minified content and URL encode it properly
+MINIFIED_CONTENT=$(cat "$TEMP_FILE")
+
+# Create bookmarklet with proper encoding
+# We need to wrap the code in an IIFE and handle encoding
+BOOKMARKLET="javascript:(function(){${MINIFIED_CONTENT}})();"
+
+# URL encode special characters properly for bookmarklets
+if command -v python3 >/dev/null 2>&1; then
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe='():;,'))")
+elif command -v node >/dev/null 2>&1; then
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | node -e "console.log(encodeURIComponent(require('fs').readFileSync(0, 'utf8').trim()))")
+else
+    # Fallback to basic sed encoding
+    ENCODED_BOOKMARKLET=$(echo "$BOOKMARKLET" | sed 's/ /%20/g' | sed 's/"/%22/g' | sed 's/</%3C/g' | sed 's/>/%3E/g' | sed 's/#/%23/g')
+fi
+
+# Show final size
+FINAL_SIZE=${#ENCODED_BOOKMARKLET}
+log::info "Final bookmarklet size: ${FINAL_SIZE} characters"
+
+# Warn if it's getting large (browsers have limits)
+if [ "$FINAL_SIZE" -gt 2000 ]; then
+    log::info "Bookmarklet is large (${FINAL_SIZE} chars). Some browsers may have issues."
+    if [ "$FINAL_SIZE" -gt 4000 ]; then
+        log::info "Consider breaking this into smaller functions or using a different approach."
+    fi
+fi
+
+# Set bookmarklet name based on the file
+FILE_BASENAME=$(basename "$TARGET_FILE" .js)
+DYNAMIC_NAME="${BOOKMARKLET_EMOJI} ${FILE_BASENAME}"
+
+# Output the bookmarklet
+echo
+log::info "Bookmarklet ready:"
+echo
+echo "$ENCODED_BOOKMARKLET"
+echo
+
+# Use dynamic bookmarklet name
+log::info "Using bookmarklet name: $DYNAMIC_NAME"
+
+# Create HTML file for easy drag-and-drop
+HTML_FILE=$(mktemp).html
+
+# Create a simple SVG favicon for copy/paste
+FAVICON_SVG='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+
+cat > "$HTML_FILE" << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bookmarklet - $DYNAMIC_NAME Ready to Install</title>
+    <link rel="icon" href="$FAVICON_SVG" type="image/svg+xml">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 40px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 30px;
+        }
+        .bookmarklet-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 18px;
+            margin: 20px 0;
+            transition: transform 0.2s ease;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        .bookmarklet-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        .copy-icon {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+        }
+        .instructions {
+            background: #e8f5e8;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 0 8px 8px 0;
+            text-align: left;
+        }
+        .stats {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .code {
+            background: #f1f3f4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 15px 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>$DYNAMIC_NAME is Ready!</h1>
+
+        <p>Drag the button below to your bookmarks bar in Chrome:</p>
+
+        <a href="$ENCODED_BOOKMARKLET" class="bookmarklet-link">
+            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            $DYNAMIC_NAME
+        </a>
+
+        <div class="instructions">
+            <h3>🚀 How to Install:</h3>
+            <ol>
+                <li><strong>Show bookmarks bar:</strong> Press <code>Ctrl+Shift+B</code> (or <code>Cmd+Shift+B</code> on Mac)</li>
+                <li><strong>Drag the button:</strong> Click and drag the blue button above to your bookmarks bar</li>
+                <li><strong>Test it:</strong> Go to the target page and click your new bookmark</li>
+            </ol>
+        </div>
+
+        <div class="stats">
+            <h3>📊 Bookmarklet Stats:</h3>
+            <p><strong>Source file:</strong> $TARGET_FILE</p>
+            <p><strong>Final size:</strong> ${FINAL_SIZE} characters</p>
+            <p><strong>Minified with:</strong> ${MINIFIER}</p>
+            <p><strong>Combined size:</strong> ${INPUT_SIZE} bytes</p>
+            <p><strong>Compressed size:</strong> ${MINIFIED_SIZE} bytes</p>
+        </div>
+
+        <details>
+            <summary>🔧 Raw Code (for manual creation)</summary>
+            <div class="code">$ENCODED_BOOKMARKLET</div>
+        </details>
+    </div>
+</body>
+</html>
+EOF
+
+log::info "HTML file created: $HTML_FILE"
+
+# Try to open in Chrome
+if command -v google-chrome >/dev/null 2>&1; then
+    log::info "Opening in Chrome..."
+    google-chrome "$HTML_FILE" >/dev/null 2>&1 &
+elif command -v chrome >/dev/null 2>&1; then
+    log::info "Opening in Chrome..."
+    chrome "$HTML_FILE" >/dev/null 2>&1 &
+elif command -v chromium >/dev/null 2>&1; then
+    log::info "Opening in Chromium..."
+    chromium "$HTML_FILE" >/dev/null 2>&1 &
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    if [ -d "/Applications/Google Chrome.app" ]; then
+        log::info "Opening in Chrome (macOS)..."
+        open -a "Google Chrome" "$HTML_FILE"
+    else
+        log::info "Opening in default browser (macOS)..."
+        open "$HTML_FILE"
+    fi
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+    # Windows
+    log::info "Opening in default browser (Windows)..."
+    start "$HTML_FILE"
+else
+    # Linux fallback
+    if command -v xdg-open >/dev/null 2>&1; then
+        log::info "Opening in default browser (Linux)..."
+        xdg-open "$HTML_FILE" >/dev/null 2>&1 &
+    else
+        log::info "Could not automatically open browser."
+        echo "Please open this file manually: $HTML_FILE"
+    fi
+fi
+
+# Cleanup the temp JS files but keep HTML file for now
+rm -f "$TEMP_FILE" "$INPUT_FILE"
+
+log::info "Done! Chrome should open with your bookmarklet ready to drag."
+log::info "HTML file will be cleaned up automatically, or delete manually: $HTML_FILE"
