@@ -144,10 +144,6 @@ class richlinker {
         async extractInfo() {
             throw new Error('extractInfo() must be implemented');
         }
-
-        async process() {
-            return await this.extractInfo();
-        }
     };
 }
 
@@ -221,16 +217,22 @@ class GoogleDocsHandler extends richlinker.Handler {
 
 class AtlassianHandler extends richlinker.Handler {
     canHandle(url) {
-        return url.includes('.atlassian.net/');
+        return url.includes('.atlassian.net/wiki/spaces/');
     }
 
     async extractInfo() {
-        const titleText = document.title || 'Atlassian Page';
+        const rawTitle = document.title || 'Atlassian Wiki Page';
         const titleUrl = window.location.href;
 
-        // TODO: Add issue number, project, status extraction for headerText/headerUrl
+        // Remove "space name" and "Confluence" suffix by splitting on ' - ' and removing last 2 elements
+        const titleParts = rawTitle.split(' - ');
+        const titleText = titleParts.length > 2 ? titleParts.slice(0, -2).join(' - ') : rawTitle;
 
-        return new richlinker.WebpageInfo({titleText, titleUrl});
+        NotificationSystem.showDebug(`AtlassianHandler: Raw title="${rawTitle}"`);
+        NotificationSystem.showDebug(`AtlassianHandler: Cleaned title="${titleText}"`);
+        NotificationSystem.showDebug(`AtlassianHandler: titleUrl="${titleUrl}"`);
+
+        return new richlinker.WebpageInfo({titleText, titleUrl, headerText: null, headerUrl: null});
     }
 }
 
@@ -267,9 +269,6 @@ const handlers = [
 ];
 
 async function execute() {
-    // Enable debug mode at start
-    NotificationSystem.turnOnDebugMode();
-
     // Dispatch to proper handler
     const currentUrl = window.location.href;
     NotificationSystem.showDebug(`RichLinker: Processing URL: ${currentUrl}`);
@@ -283,7 +282,7 @@ async function execute() {
 
     NotificationSystem.showDebug(`RichLinker: Using handler: ${handler.constructor.name}`);
 
-    const webpageInfo = await handler.process();
+    const webpageInfo = await handler.extractInfo();
     NotificationSystem.showDebug(`RichLinker: Extracted info - Title: "${webpageInfo.titleText}", Header: "${webpageInfo.headerText || 'none'}"`);
 
     // Copy to clipboard
