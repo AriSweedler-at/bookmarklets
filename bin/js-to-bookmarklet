@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # js-to-bookmarklet
 # Converts JavaScript files to bookmarklet format with shared library support
@@ -14,7 +14,15 @@ log::info() { echo -e "${c_green}[INFO] ${c_rst}" "$@" >&2 ; }
 RECENT_FILE=".recent-bookmarklet"
 JS_DIR="${JS2BM_JS_DIR:-src/bookmarklet}"
 JS_LIB_DIR="${JS2BM_JS_LIB_DIR:-src/js-lib}"
-BOOKMARKLET_EMOJI="${JS2BM_EMOJI:-📋}"
+
+# Default emoji mappings for specific bookmarklets
+declare -A DEFAULT_EMOJIS
+DEFAULT_EMOJIS["richlinker"]="🔗"
+DEFAULT_EMOJIS["github-autoscroll"]="🔍"
+
+# Default fallback emoji and override check
+DEFAULT_EMOJI="📋"
+BOOKMARKLET_EMOJI="${JS2BM_EMOJI:-}"
 
 # Help text
 show_help() {
@@ -156,34 +164,63 @@ save_recent_file() {
     echo "$filename" > "$RECENT_FILE"
 }
 
-# Function to concatenate js-lib files with main file
+# Function to process include directives and create combined file
 create_combined_file() {
     local target_file="$1"
     local temp_file="$2"
-
-    # First, add all js-lib files
-    if [ -d "$JS_LIB_DIR" ]; then
-        log::info "Including shared libraries from $JS_LIB_DIR..."
-        find "$JS_LIB_DIR" -name "*.js" -type f | sort | while read -r lib_file; do
-            echo "// === $(basename "$lib_file") ===" >> "$temp_file"
-            cat "$lib_file" >> "$temp_file"
-            echo "" >> "$temp_file"  # Add blank line between files
-        done
-    else
-        log::info "No js-lib directory found, skipping shared libraries"
-    fi
-
-    # Then add the main file
     local main_file="$JS_DIR/$target_file"
+
     if [ ! -f "$main_file" ]; then
         log::err "File not found: $main_file"
         exit 1
     fi
 
-    echo "// === Main: $(basename "$main_file") ===" >> "$temp_file"
-    cat "$main_file" >> "$temp_file"
+    # Track included files to avoid duplicates
+    local -A included_files
 
-    log::info "Combined $(basename "$main_file") with shared libraries"
+    # Function to process includes recursively
+    process_file() {
+        local file_path="$1"
+        local file_key=$(basename "$file_path")
+
+        # Skip if already included
+        if [[ -n "${included_files[$file_key]:-}" ]]; then
+            return
+        fi
+        included_files[$file_key]=1
+
+        echo "// === $(basename "$file_path") ===" >> "$temp_file"
+
+        # Process each line looking for include directives
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^[[:space:]]*//[[:space:]]*ARI_include[[:space:]]+(.+)$ ]]; then
+                local include_file="${BASH_REMATCH[1]}"
+                local include_path="$JS_LIB_DIR/$include_file"
+
+                # Add .js extension if not present
+                if [[ "$include_file" != *.js ]]; then
+                    include_path="$include_path.js"
+                fi
+
+                if [ -f "$include_path" ]; then
+                    log::info "Including: $include_file"
+                    process_file "$include_path"
+                else
+                    log::err "Include file not found: $include_path"
+                    echo "// ERROR: Include file not found: $include_file" >> "$temp_file"
+                fi
+            else
+                # Regular line, add to output
+                echo "$line" >> "$temp_file"
+            fi
+        done < "$file_path"
+
+        echo "" >> "$temp_file"  # Add blank line after each file
+    }
+
+    # Start processing from the main file
+    log::info "Processing includes for $(basename "$main_file")..."
+    process_file "$main_file"
 }
 
 # Main script starts here
@@ -305,7 +342,17 @@ fi
 
 # Set bookmarklet name based on the file
 FILE_BASENAME=$(basename "$TARGET_FILE" .js)
-DYNAMIC_NAME="${BOOKMARKLET_EMOJI} ${FILE_BASENAME}"
+
+# Choose emoji: env var > specific mapping (basename only) > default fallback
+if [[ -n "$BOOKMARKLET_EMOJI" ]]; then
+    CHOSEN_EMOJI="$BOOKMARKLET_EMOJI"
+elif [[ -n "${DEFAULT_EMOJIS[$FILE_BASENAME]:-}" ]]; then
+    CHOSEN_EMOJI="${DEFAULT_EMOJIS[$FILE_BASENAME]}"
+else
+    CHOSEN_EMOJI="$DEFAULT_EMOJI"
+fi
+
+DYNAMIC_NAME="${CHOSEN_EMOJI} ${FILE_BASENAME}"
 
 # Output the bookmarklet
 echo

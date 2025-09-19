@@ -1,3 +1,5 @@
+//ARI_include notifications.js
+
 /**
  * Validation function to check if we're on GitHub PR files page
  * @returns {boolean} True if on GitHub PR files page
