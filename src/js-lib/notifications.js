@@ -7,6 +7,7 @@ class NotificationSystem {
    * @param {string} message - Message to display
    */
   static showSuccess(message) {
+    console.log('SUCCESS:', message);
     this.show(message, '#28a745');
   }
 
@@ -15,6 +16,7 @@ class NotificationSystem {
    * @param {string} message - Message to display
    */
   static showError(message) {
+    console.error('ERROR:', message);
     this.show(message, '#f8d7da');
   }
 
@@ -23,7 +25,29 @@ class NotificationSystem {
    * @param {string} message - Message to display
    */
   static showWarning(message) {
+    console.warn('WARNING:', message);
     this.show(message, '#fff3cd');
+  }
+
+  /**
+   * Shows a dege info extracted successfully
+   * bug notification - always logs to console, shows UI only if debug mode enabled
+   * @param {string} message - Message to display
+   */
+  static showDebug(message) {
+    console.log('DEBUG:', message);
+    // Only show UI notification if debug mode is enabled
+    if (sessionStorage.getItem('at bookmarklet debug')) {
+      this.show(message, '#6c757d'); // Grey color for debug
+    }
+  }
+
+  /**
+   * Turn on debug mode for this session only (cleared on page refresh)
+   */
+  static turnOnDebugMode() {
+    sessionStorage.setItem('at bookmarklet debug', 'true');
+    this.showDebug('Debug mode enabled for this session');
   }
 
   /**
@@ -42,7 +66,17 @@ class NotificationSystem {
     // Create notification element
     const notification = document.createElement('div');
     notification.id = 'gdocs-slack-notification';
-    notification.textContent = message;
+
+    // Handle newlines by creating text nodes and br elements to avoid TrustedHTML issues
+    const parts = message.split('\n');
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) {
+        notification.appendChild(document.createElement('br'));
+      }
+      if (parts[i]) {
+        notification.appendChild(document.createTextNode(parts[i]));
+      }
+    }
 
     // Apply professional styling
     notification.style.cssText = `
@@ -74,7 +108,7 @@ class NotificationSystem {
       notification.style.opacity = '1';
     });
 
-    // Auto-remove after 3 seconds with fade out
+    // Auto-remove after 2 seconds with fade out
     setTimeout(() => {
       notification.style.transform = 'translateX(100%)';
       notification.style.opacity = '0';
@@ -83,6 +117,6 @@ class NotificationSystem {
           notification.parentNode.removeChild(notification);
         }
       }, 300);
-    }, 3000);
+    }, 2000);
   }
 }
