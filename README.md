@@ -1,11 +1,11 @@
-# Bookmarklet Compiler & Google Docs Rich Link
+# Bookmarklet Compiler & RichLinker
 
-A modular system for creating JavaScript bookmarklets with shared libraries. Includes a Google Docs to Slack rich link bookmarklet that creates clickable links with smart header detection.
+A modular system for creating JavaScript bookmarklets with shared libraries. Includes RichLinker - a multi-platform rich link generator that works across Google Docs, Atlassian Confluence, and Airtable with smart duplicate detection.
 
 ## Quick Start
 
 ```bash
-bin/js-to-bookmarklet gdocs-slack
+bin/js-to-bookmarklet src/bookmarklet/richlinker
 ```
 
 ## Project Structure
@@ -13,11 +13,11 @@ bin/js-to-bookmarklet gdocs-slack
 ```
 📁 src/                           # Source code directory
   ├── bookmarklet/                # Individual bookmarklet files
-  │   ├── gdocs-slack.js         # Google Docs rich link bookmarklet
-  │   ├── github-autoscroll.js   # GitHub PR auto-scroll tool
-  │   └── no-op.js               # Simple test bookmarklet
+  │   ├── richlinker.js          # Multi-platform rich link generator
+  │   └── ...                    # Additional bookmarklets
   └── js-lib/                    # Shared libraries (auto-included)
-      └── notifications.js       # Notification system
+      ├── notifications.js       # Notification system with debug mode
+      └── clipboard.js           # Modern clipboard utilities
 
 📁 bin/                          # Executable scripts
   └── js-to-bookmarklet          # Bookmarklet compiler
@@ -27,19 +27,21 @@ bin/js-to-bookmarklet gdocs-slack
 
 1. Chrome opens with installation page
 2. Drag the button to your bookmarks bar
-3. Go to any Google Doc and click your bookmark
-4. Paste in Slack and you get a rich formatted link!
+3. Go to any supported site (Google Docs, Atlassian, Airtable) and click your bookmark
+4. Paste anywhere and you get a rich formatted link!
 
 ## Features
 
-### Smart Header Detection
-- **Single Click**: Copies link with header info (e.g., "My Document #Section Name")
-- **Double Click**: Strips header info (just "My Document")
-- Automatically detects current document section from Google Docs navigation
+### Smart Duplicate Detection
+- **First Click**: Copies basic link (e.g., "My Document", "Task Title")
+- **Second Click** (within 1 second): Includes context info (e.g., "My Document #Section Name", "Task Title #Table Name")
+- Automatically detects current section/context from supported platforms
 
-### Cross-Browser Support
-- **Modern Browsers**: Rich HTML links that paste beautifully in Slack
-- **Legacy Browsers**: Graceful fallback to formatted plain text
+### Multi-Platform Support
+- **Google Docs**: Document titles with section headers from navigation outline
+- **Atlassian Confluence**: Clean page titles (removes space name and "Confluence" suffix)
+- **Airtable**: Task titles from specific task detail pages
+- **Rich Text**: HTML links that paste beautifully everywhere
 - **Focus Issues**: Automatic workaround for browser clipboard permissions
 
 ### Professional UX
@@ -54,13 +56,13 @@ Customize the compiler behavior with these environment variables:
 
 ```bash
 # Custom emoji for bookmarklet names
-JS2BM_EMOJI="🔍" bin/js-to-bookmarklet github-autoscroll
+JS2BM_EMOJI="🔗" bin/js-to-bookmarklet src/bookmarklet/richlinker
 
 # Custom source directories
 JS2BM_JS_DIR="scripts" JS2BM_JS_LIB_DIR="shared" bin/js-to-bookmarklet my-tool
 
 # Default usage (uses built-in defaults)
-bin/js-to-bookmarklet gdocs-slack
+bin/js-to-bookmarklet src/bookmarklet/richlinker
 ```
 
 ### Edit the JavaScript
@@ -74,13 +76,15 @@ You can create any bookmarklet with `bin/js-to-bookmarklet`
 
 ## Advanced Usage
 
-### Header Behavior
-The bookmarklet intelligently handles document sections:
+### Duplicate Detection Behavior
+The bookmarklet intelligently handles repeated clicks:
 
 ```
-Single click → "Project Plan #Budget Analysis": https://docs.google.com/...
-Double click → "Project Plan": https://docs.google.com/...
+First click  → "Project Plan": https://docs.google.com/...
+Second click → "Project Plan #Budget Analysis": https://docs.google.com/...
 ```
+
+Works across all supported platforms (Google Docs, Atlassian, Airtable).
 
 ### Build Pipeline
 The shell script provides a complete build and installation pipeline:
@@ -92,8 +96,8 @@ The shell script provides a complete build and installation pipeline:
 ## Troubleshooting
 
 ### Common Issues
-- **"This only works on Google Docs"**: Make sure you're on `docs.google.com/document/...`
-- **"Copy failed"**: Try refreshing the page, fallback copies plain text
+- **"No handler found for this page"**: Make sure you're on a supported site (Google Docs, Atlassian Confluence, Airtable task pages)
+- **"Copy failed"**: Try refreshing the page, check browser clipboard permissions
 - **"Focus required"**: Click inside the document first, then try the bookmarklet
 
 ### Browser Compatibility

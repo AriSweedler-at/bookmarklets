@@ -15,7 +15,7 @@ The build pipeline that transforms JavaScript into deployable bookmarklets:
 ### Tier 2: Bookmarklet Collection
 A curated set of JavaScript files, each implementing specific web automation functionality:
 
-- **Domain-specific scripts**: Google Docs, web scraping, clipboard utilities
+- **Domain-specific scripts**: RichLinker (Google Docs, Atlassian, Airtable), web scraping, clipboard utilities
 - **Cross-platform compatibility**: Modern browser support
 - **Rich interaction**: Clipboard APIs, notifications, DOM manipulation
 - **Error handling**: Graceful degradation and user feedback
@@ -76,32 +76,50 @@ Reusable classes for common bookmarklet patterns:
 
 ### Library Usage Patterns
 ```javascript
-// Import shared functionality
-const notifications = new NotificationSystem();
-const clipboardUtils = new ClipboardUtilities();
+// RichLinker example with handler pattern
+class MyHandler extends richlinker.Handler {
+    canHandle(url) {
+        return url.includes('example.com');
+    }
 
-// Use common patterns
-if (!validatePageContext()) {
-    notifications.showError('Invalid page context');
-    return;
+    async extractInfo() {
+        const titleText = document.title;
+        const titleUrl = window.location.href;
+        return new richlinker.WebpageInfo({titleText, titleUrl});
+    }
 }
 
-// Leverage clipboard utilities
-await clipboardUtils.copyRichText(content, fallback);
-notifications.showSuccess('Copied to clipboard');
+// Use notification system
+NotificationSystem.showSuccess('Copied rich link to clipboard');
+NotificationSystem.showDebug('Debug information');
+
+// Use clipboard utilities
+await Clipboard.write({html: '<a href="...">Link</a>', text: 'Link (...)'});
 ```
 
 ## Technical Specifications
 
 ### Bookmarklet Structure
 ```javascript
-// Standard bookmarklet pattern:
-(function() {
-    // Include lib.js functionality automatically
-    // Implement specific bookmarklet logic
-    // Handle errors gracefully with notifications
-    // Provide user feedback on completion
-})();
+// RichLinker pattern with handler dispatch:
+class richlinker {
+    static WebpageInfo = class { /* Data structure for page info */ };
+    static Handler = class { /* Abstract handler interface */ };
+}
+
+// Platform-specific handlers
+class GoogleDocsHandler extends richlinker.Handler { /* ... */ }
+class AtlassianHandler extends richlinker.Handler { /* ... */ }
+class AirtableListableHandler extends richlinker.Handler { /* ... */ }
+
+// Main execution with error handling
+async function execute() {
+    const handler = handlers.find(h => h.canHandle(window.location.href));
+    if (!handler) return;
+
+    const webpageInfo = await handler.extractInfo();
+    await webpageInfo.toClipboard();
+}
 ```
 
 ### Clipboard API Handling (lib.js)
@@ -132,13 +150,15 @@ notifications.showSuccess('Copied to clipboard');
 ## File Structure
 ```
 /
-├── lib.js                  # Shared utility library
-├── bookmarklets/
-│   ├── gdocs-slack.js      # Google Docs to Slack links
-│   ├── scraper.js          # Web content extraction
-│   └── ...                 # Additional bookmarklet scripts
-├── bin/js-to-bookmarklet   # Build and deployment script
-└── AGENTS.md              # This architecture document
+├── src/
+│   ├── js-lib/
+│   │   ├── notifications.js    # NotificationSystem class
+│   │   └── clipboard.js        # Clipboard utilities
+│   └── bookmarklet/
+│       ├── richlinker.js       # Multi-platform rich link generator
+│       └── ...                 # Additional bookmarklet scripts
+├── bin/js-to-bookmarklet       # Build and deployment script
+└── AGENTS.md                  # This architecture document
 ```
 
 ## Usage Examples
@@ -146,10 +166,10 @@ notifications.showSuccess('Copied to clipboard');
 ### Basic Development
 ```bash
 # Create new bookmarklet installation page
-bin/js-to-bookmarklet bookmarklets/gdocs-slack
+bin/js-to-bookmarklet src/bookmarklet/richlinker
 
 # With custom naming
-BOOKMARKLET_NAME="📋 Copy Doc Link" bin/js-to-bookmarklet bookmarklets/gdocs-slack
+BOOKMARKLET_NAME="🔗 Rich Link Copier" bin/js-to-bookmarklet src/bookmarklet/richlinker
 ```
 
 ### User Installation Flow
