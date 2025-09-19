@@ -71,6 +71,13 @@ The shell script provides a complete build and installation pipeline:
 
 ## Demo
 
-This is old, but the concept holds
+### richlinker
 
 ![Demo](resources/richlink.gif)
+
+### github-autoscroll
+
+This only makes sense for refactoring changes where the changes are within 1
+screen-length and very repetitive. Lmao. Anyway.
+
+![Demo](resources/github-autoscroll.gif)
