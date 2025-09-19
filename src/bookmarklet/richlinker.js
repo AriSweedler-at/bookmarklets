@@ -141,12 +141,12 @@ class richlinker {
             throw new Error('canHandle() must be implemented');
         }
 
-        extractInfo() {
+        async extractInfo() {
             throw new Error('extractInfo() must be implemented');
         }
 
         async process() {
-            return this.extractInfo();
+            return await this.extractInfo();
         }
     };
 }
@@ -192,7 +192,7 @@ class GoogleDocsHandler extends richlinker.Handler {
         return null;
     }
 
-    extractInfo() {
+    async extractInfo() {
         const titleText = document.title.replace(' - Google Docs', '') || 'Untitled Document';
         const titleUrl = window.location.href.split('#')[0];
         const headerUrl = window.location.href;
@@ -224,7 +224,7 @@ class AtlassianHandler extends richlinker.Handler {
         return url.includes('.atlassian.net/');
     }
 
-    extractInfo() {
+    async extractInfo() {
         const titleText = document.title || 'Atlassian Page';
         const titleUrl = window.location.href;
 
@@ -234,25 +234,36 @@ class AtlassianHandler extends richlinker.Handler {
     }
 }
 
-class AirtableHandler extends richlinker.Handler {
+class AirtableListableHandler extends richlinker.Handler {
     canHandle(url) {
-        return url.includes('airtable.com/app');
+        // You must be in the '✅ Task Detail (Sidesheet+Fullscreen, Global, v2025.04.24)' page for
+        // this to work
+        const good_page = "✅ Task Detail (Sidesheet+Fullscreen, Global, v2025.04.24) page"
+        const is_good_page = url.includes('https://airtable.com/apptivTqaoebkrmV1/pagYS8GHSAS9swLLI/')
+        console.log(`AirtableListableHandler: ${is_good_page ? "YES ✅" : "NOT ❌"} in page='${good_page}'`)
+        return is_good_page
     }
 
-    extractInfo() {
-        const titleText = document.title || 'Airtable Base';
+    async extractInfo() {
+        // Get the record title from the page
+        const titleElement = document.querySelector('.heading-size-default')
+        if (!titleElement) {
+            console.log("Failed to find title element")
+        }
+        const titleText = titleElement.textContent.trim()
         const titleUrl = window.location.href;
 
-        // TODO: Add base name, table name, view extraction for headerText/headerUrl
+        NotificationSystem.showDebug(`AirtableListableHandler: Extracting from title="${titleText}"`);
+        NotificationSystem.showDebug(`AirtableListableHandler: titleUrl="${titleUrl}"`);
 
-        return new richlinker.WebpageInfo({titleText, titleUrl});
+        return new richlinker.WebpageInfo({titleText, titleUrl, headerText: null, headerUrl: null});
     }
 }
 
 const handlers = [
     new GoogleDocsHandler(),
     new AtlassianHandler(),
-    new AirtableHandler()
+    new AirtableListableHandler()
 ];
 
 async function execute() {
