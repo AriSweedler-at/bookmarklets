@@ -1,185 +1,171 @@
-# Google Docs to Slack Rich Link Bookmarklet
+# Bookmarklet Collection & Build System
 
 ## Overview
-Create a JavaScript bookmarklet that extracts a Google Doc's title and URL, then copies it as rich text that pastes beautifully in Slack with the document title as clickable display text.
+A 2-tiered system for creating and deploying JavaScript bookmarklets. The system includes a compiler that converts JavaScript files into drag-and-drop installation webpages, plus a collection of useful bookmarklet scripts for various web automation tasks.
 
-## Code Architecture
+## System Architecture
 
-### Core Components
+### Tier 1: Compiler (js-to-bookmarklet)
+The build pipeline that transforms JavaScript into deployable bookmarklets:
 
-#### 1. DocumentLinkAnswer Class
-The central data structure that represents a document link with rich formatting capabilities:
+- **Input**: JavaScript source files with bookmarklet logic
+- **Processing**: Minification, URL encoding, HTML generation
+- **Output**: Interactive webpage with drag-and-drop bookmarklet installation
 
-- **Constructor**: Takes title, URL, and optional heading text
-- **Rich Text Conversion**: `toRichText()` generates HTML links for Slack
-- **Plain Text Fallback**: `toPlainText()` provides fallback formatting
-- **Clipboard Integration**: `toClipboard()` handles modern and legacy clipboard APIs
-- **Focus Workaround**: `_attemptFocusWorkaround()` resolves browser focus issues
-- **Duplicate Detection**: Works with `isDuplicate()` to prevent redundant copies
+### Tier 2: Bookmarklet Collection
+A curated set of JavaScript files, each implementing specific web automation functionality:
 
-#### 2. NotificationSystem Class
-Professional user feedback with smooth animations:
-- `showSuccess()`: Green success messages
-- `showError()`: Red error alerts
-- `showWarning()`: Yellow warning messages
-- `show()`: Generic notification display with animated slide-in/out effects and auto-cleanup
+- **Domain-specific scripts**: Google Docs, web scraping, clipboard utilities
+- **Cross-platform compatibility**: Modern browser support
+- **Rich interaction**: Clipboard APIs, notifications, DOM manipulation
+- **Error handling**: Graceful degradation and user feedback
 
-#### 3. Heading Detection System
-Smart extraction of document section context
+## Core Library (lib.js)
 
-#### 4. Main Execution Pipeline
-- `isGoogleDocsPage()`: Validates execution context
-- `getAnswer()`: Extracts document metadata
-- `isDuplicate()`: Prevents redundant clipboard operations
-- `copyDocAsRichLink()`: Orchestrates the copy operation
-- `execute()`: Entry point with error handling
+The shared library provides common functionality across all bookmarklets:
 
-### Data Flow
-1. **Validation**: Check if running on Google Docs page
-2. **Extraction**: Get document title, URL, and heading context
-3. **Deduplication**: Compare with existing clipboard content
-4. **Formatting**: Create both rich HTML and plain text versions
-5. **Clipboard**: Use modern API with legacy fallbacks
-6. **Feedback**: Show user notification with operation result
+### NotificationSystem Class
+Unified user feedback with professional styling:
+- `showSuccess()`, `showError()`, `showWarning()`: Contextual notifications
+- `show()`: Generic notification with animated slide-in/out and auto-cleanup
+- CSS injection for consistent cross-site styling
 
-### Build Pipeline (bin/js-to-bookmarklet)
+### Clipboard Utilities
+Modern clipboard operations:
+- **Modern API**: `navigator.clipboard.write()` with `ClipboardItem` support
+- **Rich Text**: HTML formatting for platforms like Slack
+- **Error Handling**: Clear messaging for unsupported browsers
 
-#### Processing Pipeline
+### DOM Helpers
+Common DOM manipulation and detection:
+- Page validation utilities
+- Element selection and content extraction
+- Focus management and event handling
+
+### Data Structures
+Reusable classes for common bookmarklet patterns:
+- Link formatting and clipboard integration
+- Duplicate detection and caching
+- Content transformation pipelines
+
+## Build Pipeline (bin/js-to-bookmarklet)
+
+### Processing Steps
 1. **Input Validation**: Check for JavaScript source and required tools
-2. **Minification**: Use terser for optimal compression
-3. **Encoding**: URL encode for `javascript:` protocol compatibility
-4. **HTML Generation**: Create drag-and-drop installation page
-5. **Browser Launch**: Auto-open with bookmarklet ready for installation
+2. **Library Integration**: Automatically include lib.js for shared functionality
+3. **Minification**: Use terser for optimal compression with fallbacks
+4. **Encoding**: URL encode for `javascript:` protocol compatibility
+5. **HTML Generation**: Create drag-and-drop installation webpage
+6. **Browser Launch**: Auto-open with bookmarklet ready for installation
 
-#### Features
-- **Multi-platform Minification**: Prefers terser, falls back gracefully
-- **Size Optimization**: Warns about browser limits and provides stats
-- **Cross-platform Browser Detection**: Handles Chrome/Chromium/Safari across OS
+### Features
+- **Multi-platform Minification**: Prefers terser, graceful fallbacks to uglifyjs/node
+- **Size Optimization**: Warns about browser limits and provides compression stats
+- **Cross-platform Browser Detection**: Chrome/Chromium/Safari across macOS/Linux/Windows
 - **Professional Installation UX**: Beautiful HTML page with clear instructions
-- **Customizable Naming**: Environment variable for bookmarklet titles
+- **Customizable Naming**: Environment variables for bookmarklet titles and descriptions
 
-## Requirements
+## Development Workflow
 
-### Core Functionality
-- Extract clean document title (remove " - Google Docs" suffix)
-- Get current document URL
-- Copy as rich HTML for Slack + plain text fallback
-- Show user feedback notifications
-- Only work on actual Google Docs pages
-- Handle modern and legacy clipboard APIs gracefully
+### Creating New Bookmarklets
+1. **Write JavaScript**: Focus on core functionality, leverage lib.js for common tasks
+2. **Test Locally**: Verify functionality in target browser environments
+3. **Compile**: Use `bin/js-to-bookmarklet <script-name>` to generate installation page
+4. **Deploy**: Drag from generated webpage to browser bookmarks bar
+5. **Distribute**: Share HTML installation page for easy user adoption
 
-### Bookmarklet Pipeline
-1. **JavaScript Development**: Core script with proper error handling
-2. **Minification**: Compress JavaScript for bookmarklet size limits
-3. **Encoding**: URL encode for `javascript:` protocol
-4. **HTML Generation**: Create drag-and-drop installation page
-5. **Browser Launch**: Auto-open Chrome with installation page
+### Library Usage Patterns
+```javascript
+// Import shared functionality
+const notifications = new NotificationSystem();
+const clipboardUtils = new ClipboardUtilities();
 
-### User Experience
-- One-keystroke activation (via Karabiner/Raycast integration)
-- Clean notifications (no console errors)
-- Graceful fallbacks for different browser capabilities
-- Professional bookmarklet naming with copy icon
+// Use common patterns
+if (!validatePageContext()) {
+    notifications.showError('Invalid page context');
+    return;
+}
+
+// Leverage clipboard utilities
+await clipboardUtils.copyRichText(content, fallback);
+notifications.showSuccess('Copied to clipboard');
+```
 
 ## Technical Specifications
 
-### JavaScript Requirements
+### Bookmarklet Structure
 ```javascript
-// Core functions needed:
-- copyDocAsRichLink() // Main copying logic
-- fallbackTextCopy() // Legacy browser support
-- showNotification() // User feedback
-- isGoogleDocsPage() // Validation
-- execute() // Entry point with error handling
+// Standard bookmarklet pattern:
+(function() {
+    // Include lib.js functionality automatically
+    // Implement specific bookmarklet logic
+    // Handle errors gracefully with notifications
+    // Provide user feedback on completion
+})();
 ```
 
-### Clipboard API Handling
-- **Modern**: `navigator.clipboard.write()` with `ClipboardItem`
-- **Fallback**: `document.execCommand('copy')` with textarea
-- **Error handling**: Try/catch with graceful degradation
-- **Rich text format**: HTML `<a>` tag for Slack recognition
+### Clipboard API Handling (lib.js)
+- **Modern Only**: `navigator.clipboard.write()` with `ClipboardItem`
+- **Rich Text**: HTML formatting for platforms like Slack, Teams, etc.
+- **Error Handling**: Clear error messages for unsupported browsers
 
-### Shell Script Pipeline
+### Build Script Features
 ```bash
-# Input: JavaScript from stdin
-# Output: Chrome opens with drag-ready bookmarklet
+# Input: JavaScript file
+# Output: Interactive installation webpage
 
-# Features needed:
+# Capabilities:
 - Multi-platform minification (terser > uglifyjs > node > basic)
-- URL encoding for bookmarklet format
-- Size optimization and warnings
-- Cross-platform Chrome detection and launch
-- Beautiful HTML installation page
-- Customizable bookmarklet naming
+- URL encoding for javascript: protocol
+- Size optimization with browser limit warnings
+- Cross-platform browser detection and launch
+- Professional HTML installation pages
+- Customizable titles and descriptions
 ```
 
-### Installation Page Requirements
-- **Visual**: Clean, professional design with copy icon
-- **Functional**: Drag-and-drop to bookmarks bar
-- **Informative**: Size stats, installation instructions
-- **Interactive**: Success detection and cleanup guidance
+### Installation Page Components
+- **Visual Design**: Clean, professional styling with intuitive icons
+- **Drag-and-Drop**: One-click bookmark installation
+- **Information Display**: File size, compression stats, usage instructions
+- **Responsive Layout**: Works on desktop and mobile browsers
 
 ## File Structure
 ```
 /
-├── gdocs-slack.js          # Core JavaScript functionality
-├── bin/js-to-bookmarklet   # Conversion and installation script
-└── AGENTS.md              # This specification file
+├── lib.js                  # Shared utility library
+├── bookmarklets/
+│   ├── gdocs-slack.js      # Google Docs to Slack links
+│   ├── scraper.js          # Web content extraction
+│   └── ...                 # Additional bookmarklet scripts
+├── bin/js-to-bookmarklet   # Build and deployment script
+└── AGENTS.md              # This architecture document
 ```
 
-## Implementation Steps
+## Usage Examples
 
-### Phase 1: Core JavaScript
-1. Create main copying function with rich text support
-2. Add clipboard API detection and fallbacks
-3. Implement user notifications with animations
-4. Add Google Docs page validation
-5. Handle all error cases gracefully
-
-### Phase 2: Bookmarklet Pipeline
-1. Create shell script with minification options
-2. Add proper URL encoding for javascript: protocol
-3. Implement cross-platform Chrome detection
-4. Generate beautiful HTML installation page
-5. Add user customization options
-
-### Phase 3: Integration & Testing
-1. Test on different browsers (Chrome, Safari, Firefox)
-2. Verify Slack rich link formatting
-3. Test with various Google Docs (shared, private, etc.)
-4. Validate bookmarklet size limits
-5. Test cross-platform shell script
-
-## Usage Workflow
+### Basic Development
 ```bash
-# Development
-bin/js-to-bookmarklet gdocs-slack
+# Create new bookmarklet installation page
+bin/js-to-bookmarklet bookmarklets/gdocs-slack
 
-# User Experience
-1. Script prompts for bookmarklet name
-2. Chrome opens with installation page
-3. User drags button to bookmarks bar
-4. User goes to Google Doc and clicks bookmark
-5. User pastes in Slack → sees rich formatted link
+# With custom naming
+BOOKMARKLET_NAME="📋 Copy Doc Link" bin/js-to-bookmarklet bookmarklets/gdocs-slack
 ```
 
-## Success Criteria
-- ✅ One-click copying from Google Docs
-- ✅ Rich text paste in Slack (title as link text)
-- ✅ No console errors or warnings
-- ✅ Works across modern browsers
-- ✅ Professional installation experience
-- ✅ Automated build and deployment pipeline
-- ✅ Integration with Karabiner/Raycast for keyboard shortcuts
+### User Installation Flow
+1. Developer runs build script → generates installation webpage
+2. User visits webpage → sees drag-and-drop button
+3. User drags to bookmarks bar → bookmarklet installed
+4. User clicks bookmark on target site → functionality executes
+5. User receives notification feedback → confirms success
 
 ## Browser Compatibility
-- **Modern**: Chrome/Edge/Safari with full Clipboard API
-- **Legacy**: Firefox, older browsers with execCommand fallback
+- **Primary**: Chrome, Edge, Safari (full modern API support)
+- **Secondary**: Firefox, Opera (modern browsers only)
 - **Mobile**: iOS Safari, Android Chrome (where bookmarklets supported)
 
-## Future Enhancements
-- Support for other Google Workspace apps (Sheets, Slides)
-- Custom link formatting options
-- Bulk document link generation
-- Integration with other chat platforms (Teams, Discord)
-- Browser extension version for enhanced functionality
+## Extension Points
+- **New Bookmarklets**: Add JavaScript files, leverage lib.js utilities
+- **Custom Notifications**: Extend NotificationSystem for specialized feedback
+- **Platform Integration**: Add clipboard format support for new platforms
+- **Build Customization**: Environment variables for titles, descriptions, styling
