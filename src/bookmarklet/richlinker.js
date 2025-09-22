@@ -140,7 +140,7 @@ class richlinker {
             }
         }
 
-        canHandle(url) {
+        canHandle(_) {
             throw new Error('canHandle() must be implemented');
         }
 
@@ -239,14 +239,33 @@ class AtlassianHandler extends richlinker.Handler {
     }
 }
 
-class AirtableListableHandler extends richlinker.Handler {
+class AirtableHandler extends richlinker.Handler {
     canHandle(url) {
-        // You must be in the '✅ Task Detail (Sidesheet+Fullscreen, Global, v2025.04.24)' page for
-        // this to work
-        const good_page = "✅ Task Detail (Sidesheet+Fullscreen, Global, v2025.04.24) page"
-        const is_good_page = url.includes('https://airtable.com/apptivTqaoebkrmV1/pagYS8GHSAS9swLLI/')
-        console.log(`AirtableListableHandler: ${is_good_page ? "YES ✅" : "NOT ❌"} in page='${good_page}'`)
-        return is_good_page
+        // You must be in one of these pages for this to work
+        const airtable_applications = [
+            {
+                base: "listable",
+                url: "https://airtable.com/apptivTqaoebkrmV1/pagYS8GHSAS9swLLI",
+                page: "✅ Task Detail (Sidesheet+Fullscreen, Global, v2025.04.24) page",
+            },
+            {
+                base: "escalations",
+                url: "https://airtable.com/appWh5G6JXbHDKC2b/paguOM7Eb387ZUnRE" ,
+                page: "UNKNOWN",
+            },
+        ]
+
+        // We can handle it if we find a match
+        const match = airtable_applications.find(app => url.startsWith(app.url));
+        if (match) {
+            console.log(
+                `AirtableHandler: YES ✅ matched | base='${match.base}' page='${match.page}'`
+            );
+            return true;
+        }
+
+        console.log(`AirtableHandler: NOT ❌ matched in any known page`);
+        return false;
     }
 
     async extractInfo() {
@@ -268,7 +287,7 @@ class AirtableListableHandler extends richlinker.Handler {
 const handlers = [
     new GoogleDocsHandler(),
     new AtlassianHandler(),
-    new AirtableListableHandler()
+    new AirtableHandler()
 ];
 
 async function execute() {
