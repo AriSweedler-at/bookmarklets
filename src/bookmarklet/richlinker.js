@@ -284,10 +284,46 @@ class AirtableHandler extends richlinker.Handler {
     }
 }
 
+class GitHubHandler extends richlinker.Handler {
+    canHandle(url) {
+        // Match GitHub PR URLs: github.com/org/repo/pull/number
+        if (!url.includes('github.com/')) {
+            return false;
+        }
+        
+        const parts = url.split('/');
+        // Expected format: https://github.com/org/repo/pull/number
+        // parts: ['https:', '', 'github.com', 'org', 'repo', 'pull', 'number', ...]
+        
+        if (parts.length < 7) {
+            return false;
+        }
+        
+        // Check that we have github.com, org, repo, 'pull', and a number
+        const domain = parts[2];
+        const org = parts[3];
+        const repo = parts[4];
+        const pullKeyword = parts[5];
+        const prNumber = parts[6];
+        
+        return domain === 'github.com' && 
+               org && org !== '' &&
+               repo && repo !== '' &&
+               pullKeyword === 'pull' &&
+               prNumber && /^\d+$/.test(prNumber);
+    }
+
+    async extractInfo() {
+        const titleText = document.querySelector('.gh-header-title').textContent.trim();
+        return new richlinker.WebpageInfo({titleText, titleUrl: window.location.href, headerText: null, headerUrl: null});
+    }
+}
+
 const handlers = [
     new GoogleDocsHandler(),
     new AtlassianHandler(),
-    new AirtableHandler()
+    new AirtableHandler(),
+    new GitHubHandler(),
 ];
 
 async function execute() {
