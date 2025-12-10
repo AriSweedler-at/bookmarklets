@@ -3,12 +3,12 @@
 
 class richlinker {
     static WebpageInfo = class {
-        constructor({titleText, titleUrl, headerText = null, headerUrl = null, inverted = false}) {
+        constructor({titleText, titleUrl, headerText = null, headerUrl = null, style = "normal"}) {
             this.titleText = titleText;
             this.titleUrl = titleUrl;
             this.headerText = headerText;
             this.headerUrl = headerUrl;
-            this.inverted = inverted;
+            this.style = style; // "normal" or "spinnaker"
         }
 
         /**
@@ -48,6 +48,51 @@ class richlinker {
                 this.titleUrl === other.titleUrl &&
                 this.headerText === other.headerText &&
                 this.headerUrl === other.headerUrl;
+        }
+
+        /**
+         * Get the link text and URL based on style and whether to include header
+         * @param {boolean} includeHeader - Whether to include header in the link
+         * @returns {{linkText: string, linkUrl: string}} The formatted link text and URL
+         */
+        getLinkTextAndUrl(includeHeader) {
+            switch (this.style) {
+                case "spinnaker": {
+                    // Spinnaker style: first click shows header, second click shows base (inverted)
+                    const useHeader = !includeHeader;
+
+                    if (useHeader && this.headerText) {
+                        // Format: "spinnaker: ${headerText}" (strip everything before '#')
+                        return {
+                            linkText: `spinnaker: ${this.headerText}`,
+                            linkUrl: this.headerUrl
+                        };
+                    }
+
+                    return {
+                        linkText: this.titleText,
+                        linkUrl: this.titleUrl
+                    };
+                }
+
+                case "normal": {
+                    // Normal style: first click shows base, second click includes header
+                    const useHeader = includeHeader;
+                    const linkText = useHeader && this.headerText ? `${this.titleText} #${this.headerText}` : this.titleText;
+                    const linkUrl = useHeader && this.headerUrl ? this.headerUrl : this.titleUrl;
+
+                    return { linkText, linkUrl };
+                }
+
+                default: {
+                    console.error(`Unknown style: "${this.style}". Falling back to "normal" style.`);
+                    const useHeader = includeHeader;
+                    const linkText = useHeader && this.headerText ? `${this.titleText} #${this.headerText}` : this.titleText;
+                    const linkUrl = useHeader && this.headerUrl ? this.headerUrl : this.titleUrl;
+
+                    return { linkText, linkUrl };
+                }
+            }
         }
 
         /**
@@ -108,11 +153,8 @@ class richlinker {
                 console.log('DEBUG: Same item detected - will include header on second copy');
             }
 
-            // Apply inverted logic if specified
-            const useHeader = this.inverted ? !includeHeader : includeHeader;
-
-            const linkText = useHeader && this.headerText ? `${this.titleText} #${this.headerText}` : this.titleText;
-            const linkUrl = useHeader && this.headerUrl ? this.headerUrl : this.titleUrl;
+            // Get link text and URL based on style
+            const { linkText, linkUrl } = this.getLinkTextAndUrl(includeHeader);
 
             const html = `<a href="${linkUrl}">${linkText}</a>`;
             const text = `${linkText} (${linkUrl})`;
@@ -123,7 +165,9 @@ class richlinker {
                 if (success) {
                     // Cache this copy for duplicate detection
                     this.cache();
-                    NotificationSystem.showSuccess(`Copied rich link to clipboard\n${this.preview(useHeader)}`);
+                    // For notification preview, show header if it's included in the link
+                    const showHeaderInPreview = linkUrl === this.headerUrl;
+                    NotificationSystem.showSuccess(`Copied rich link to clipboard\n${this.preview(showHeaderInPreview)}`);
                 } else {
                     NotificationSystem.showError('Failed to copy to clipboard');
                 }
@@ -430,9 +474,9 @@ class SpinnakerHandler extends richlinker.Handler {
         // Extract pipeline name from DOM
         const pipelineName = this.extractPipelineName(executionId);
 
-        // Use library pattern with inverted=true:
-        // First click: show header (full execution URL)
-        // Second click: no header (base executions list URL)
+        // Use spinnaker style:
+        // First click: show header as "spinnaker: ${pipelineName}" with full execution URL
+        // Second click: show base application name with executions list URL
         const baseUrl = currentUrl.split('/executions')[0] + '/executions';
 
         return new richlinker.WebpageInfo({
@@ -440,7 +484,7 @@ class SpinnakerHandler extends richlinker.Handler {
             titleUrl: baseUrl,
             headerText: pipelineName,
             headerUrl: currentUrl,
-            inverted: true
+            style: "spinnaker"
         });
     }
 }
