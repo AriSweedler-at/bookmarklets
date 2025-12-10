@@ -3,11 +3,12 @@
 
 class richlinker {
     static WebpageInfo = class {
-        constructor({titleText, titleUrl, headerText = null, headerUrl = null}) {
+        constructor({titleText, titleUrl, headerText = null, headerUrl = null, inverted = false}) {
             this.titleText = titleText;
             this.titleUrl = titleUrl;
             this.headerText = headerText;
             this.headerUrl = headerUrl;
+            this.inverted = inverted;
         }
 
         /**
@@ -107,8 +108,11 @@ class richlinker {
                 console.log('DEBUG: Same item detected - will include header on second copy');
             }
 
-            const linkText = includeHeader && this.headerText ? `${this.titleText} #${this.headerText}` : this.titleText;
-            const linkUrl = includeHeader && this.headerUrl ? this.headerUrl : this.titleUrl;
+            // Apply inverted logic if specified
+            const useHeader = this.inverted ? !includeHeader : includeHeader;
+
+            const linkText = useHeader && this.headerText ? `${this.titleText} #${this.headerText}` : this.titleText;
+            const linkUrl = useHeader && this.headerUrl ? this.headerUrl : this.titleUrl;
 
             const html = `<a href="${linkUrl}">${linkText}</a>`;
             const text = `${linkText} (${linkUrl})`;
@@ -119,7 +123,7 @@ class richlinker {
                 if (success) {
                     // Cache this copy for duplicate detection
                     this.cache();
-                    NotificationSystem.showSuccess(`Copied rich link to clipboard\n${this.preview(includeHeader)}`);
+                    NotificationSystem.showSuccess(`Copied rich link to clipboard\n${this.preview(useHeader)}`);
                 } else {
                     NotificationSystem.showError('Failed to copy to clipboard');
                 }
@@ -290,23 +294,23 @@ class GitHubHandler extends richlinker.Handler {
         if (!url.includes('github.com/')) {
             return false;
         }
-        
+
         const parts = url.split('/');
         // Expected format: https://github.com/org/repo/pull/number
         // parts: ['https:', '', 'github.com', 'org', 'repo', 'pull', 'number', ...]
-        
+
         if (parts.length < 7) {
             return false;
         }
-        
+
         // Check that we have github.com, org, repo, 'pull', and a number
         const domain = parts[2];
         const org = parts[3];
         const repo = parts[4];
         const pullKeyword = parts[5];
         const prNumber = parts[6];
-        
-        return domain === 'github.com' && 
+
+        return domain === 'github.com' &&
                org && org !== '' &&
                repo && repo !== '' &&
                pullKeyword === 'pull' &&
@@ -319,11 +323,134 @@ class GitHubHandler extends richlinker.Handler {
     }
 }
 
+class SpinnakerHandler extends richlinker.Handler {
+    parseSpinnakerUrl(url) {
+        // Remove protocol and split by '/'
+        // Expected format: https://spinnaker.k8s.{env}.cloud/#/applications/{app}/executions[/{executionId}]
+
+        // Check domain pattern
+        if (!url.includes('spinnaker.k8s.') || !url.includes('.cloud')) {
+            return null;
+        }
+
+        // Split URL into parts
+        const hashIndex = url.indexOf('#/');
+        if (hashIndex === -1) return null;
+
+        const pathPart = url.substring(hashIndex + 2); // Skip '#/'
+        const parts = pathPart.split('/');
+
+        // Validate structure: ['applications', '{app}', 'executions', ...optional executionId]
+        if (parts.length < 3) return null;
+        if (parts[0] !== 'applications') return null;
+        if (parts[2] !== 'executions') return null;
+
+        const applicationName = parts[1];
+        if (!applicationName) return null;
+
+        // Check if there's an execution ID (4th part before any query params)
+        let executionId = null;
+        if (parts.length >= 4 && parts[3]) {
+            // Remove query params from execution ID
+            executionId = parts[3].split('?')[0];
+        }
+
+        return {
+            applicationName,
+            executionId
+        };
+    }
+
+    extractPipelineName(executionId) {
+        try {
+            const executionDiv = document.getElementById(`execution-${executionId}`);
+            if (!executionDiv) {
+                NotificationSystem.showDebug(`SpinnakerHandler: Could not find execution div for ID ${executionId}`);
+                return null;
+            }
+
+            NotificationSystem.showDebug('SpinnakerHandler: Found execution div');
+
+            // Traverse up to find the execution-group (the top-level container with showing-details)
+            const executionGroup = executionDiv.closest('.execution-group');
+            if (!executionGroup) {
+                NotificationSystem.showDebug('SpinnakerHandler: Could not find execution-group');
+                return null;
+            }
+
+            NotificationSystem.showDebug('SpinnakerHandler: Found execution-group');
+
+            // The h4 is inside the sticky-header at the top of the execution-group
+            const titleElement = executionGroup.querySelector('h4.execution-group-title');
+            if (!titleElement) {
+                NotificationSystem.showDebug('SpinnakerHandler: Could not find h4.execution-group-title');
+                return null;
+            }
+
+            const pipelineName = titleElement.textContent.trim();
+            NotificationSystem.showDebug(`SpinnakerHandler: Found pipeline name: ${pipelineName}`);
+            return pipelineName;
+        } catch (error) {
+            NotificationSystem.showDebug(`SpinnakerHandler: Error extracting pipeline name: ${error.message}`);
+            return null;
+        }
+    }
+
+    canHandle(url) {
+        return this.parseSpinnakerUrl(url) !== null;
+    }
+
+    async extractInfo() {
+        const currentUrl = window.location.href;
+        NotificationSystem.showDebug(`SpinnakerHandler: Processing URL: ${currentUrl}`);
+
+        const parsed = this.parseSpinnakerUrl(currentUrl);
+        if (!parsed) {
+            NotificationSystem.showDebug('SpinnakerHandler: Failed to parse URL');
+            throw new Error('Could not parse Spinnaker URL');
+        }
+
+        const { applicationName, executionId } = parsed;
+        NotificationSystem.showDebug(`SpinnakerHandler: Application name: ${applicationName}`);
+
+        // If no execution ID, we're on the executions list page
+        if (!executionId) {
+            NotificationSystem.showDebug('SpinnakerHandler: On executions list page');
+            const titleUrl = currentUrl.split('?')[0]; // Clean any query params
+            return new richlinker.WebpageInfo({
+                titleText: applicationName,
+                titleUrl: titleUrl,
+                headerText: null,
+                headerUrl: null
+            });
+        }
+
+        NotificationSystem.showDebug(`SpinnakerHandler: Execution ID: ${executionId}`);
+
+        // Extract pipeline name from DOM
+        const pipelineName = this.extractPipelineName(executionId);
+
+        // Use library pattern with inverted=true:
+        // First click: show header (full execution URL)
+        // Second click: no header (base executions list URL)
+        const baseUrl = currentUrl.split('/executions')[0] + '/executions';
+
+        return new richlinker.WebpageInfo({
+            titleText: applicationName,
+            titleUrl: baseUrl,
+            headerText: pipelineName,
+            headerUrl: currentUrl,
+            inverted: true
+        });
+    }
+}
+
 const handlers = [
     new GoogleDocsHandler(),
     new AtlassianHandler(),
     new AirtableHandler(),
     new GitHubHandler(),
+    new SpinnakerHandler(),
 ];
 
 async function execute() {
