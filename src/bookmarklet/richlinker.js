@@ -431,7 +431,11 @@ class SpinnakerHandler extends richlinker.Handler {
                 return null;
             }
 
-            const pipelineName = titleElement.textContent.trim();
+            // Get only direct text nodes, excluding spans
+            const pipelineName = Array.from(titleElement.childNodes)
+                .filter(node => node.nodeType === Node.TEXT_NODE)
+                .map(node => node.textContent.trim())
+                .join(' ');
             NotificationSystem.showDebug(`SpinnakerHandler: Found pipeline name: ${pipelineName}`);
             return pipelineName;
         } catch (error) {
