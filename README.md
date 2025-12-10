@@ -1,6 +1,15 @@
 # Bookmarklet Compiler & RichLinker
 
-A modular system for creating JavaScript bookmarklets with shared libraries. Includes RichLinker - a multi-platform rich link generator that works across Google Docs, Atlassian Confluence, and Airtable with smart duplicate detection.
+A modular system for creating JavaScript bookmarklets with shared libraries. Includes RichLinker - a multi-platform rich link generator with smart duplicate detection.
+
+## Supported Platforms
+
+RichLinker works on:
+- **Google Docs** - Copy document title with optional heading links
+- **Atlassian Confluence** - Copy wiki page titles
+- **Airtable** - Copy task/record titles from specific bases
+- **GitHub Pull Requests** - Copy PR titles with links
+- **Spinnaker** - Copy pipeline execution links with double-click for executions list
 
 ## Quick Start
 
@@ -27,7 +36,7 @@ bin/js-to-bookmarklet richlinker
 
 1. Chrome opens with installation page
 2. Drag the button to your bookmarks bar
-3. Go to any supported site (Google Docs, Atlassian, Airtable) and click your bookmark
+3. Go to any supported site and click your bookmark
 4. Paste anywhere and you get a rich formatted link!
 
 ## Customization
@@ -65,7 +74,7 @@ The shell script provides a complete build and installation pipeline:
 ## Troubleshooting
 
 ### Common Issues
-- **"No handler found for this page"**: Make sure you're on a supported site (Google Docs, Atlassian Confluence, Airtable task pages)
+- **"No handler found for this page"**: Make sure you're on a supported platform (see Supported Platforms section above)
 - **"Copy failed"**: Try refreshing the page, check browser clipboard permissions
 - **"Focus required"**: Click inside the document first, then try the bookmarklet
 
